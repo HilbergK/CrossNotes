@@ -1,12 +1,12 @@
 # CrossNotes
 
-> ⚠️ **Not yet released.** This firmware has not been tested on a physical device. It compiles cleanly, but hardware testing is still pending. A release will be published once confirmed. Flash at your own risk — you can always revert via the CrossPoint web installer.
+> ⚠️ **Not yet tested.** This firmware has not yet been properly tested on a physical device. It compiles cleanly, but hardware testing is still pending. A release will be published once confirmed. Flash at your own risk — you can always revert via the CrossPoint web installer.
 
 ---
 
-A fork of [CrossInk](https://github.com/uxjulia/CrossInk) that adds phone-connected highlights & notes to the Xteink X4 / X3.
+CrossNotes is a fork of [CrossInk](https://github.com/uxjulia/CrossInk) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
 
-Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. No app, no cloud, no account — everything lives on the SD card.
+Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. The notes are then stored and visible within the device.
 
 ## What it adds
 
@@ -37,10 +37,8 @@ cd CrossNotes
 pio run -e tiny    # or teensy / xlarge
 ```
 
-> Build from PowerShell or CMD on Windows — not Git Bash.
-
 Prebuilt `.bin` files will be on the [Releases page](https://github.com/HilbergK/CrossNotes/releases) once hardware-tested. Flash via the [CrossPoint web installer](./docs/installation.md).
 
 ## Credits
 
-Built on [CrossInk](https://github.com/uxjulia/CrossInk) (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude (Anthropic). MIT License.
+Built on [CrossInk](https://github.com/uxjulia/CrossInk) (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude. MIT License.
