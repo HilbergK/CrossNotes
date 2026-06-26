@@ -1,3 +1,5 @@
+WORK IN PROGRESS
+
 > **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
 
 ## What's different in this fork
