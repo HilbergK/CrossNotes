@@ -30,8 +30,9 @@ function switchTab(tabName, btn) {
 
 // ── Screenshots (Session 8) ──────────────────────────────────────────────────
 // Reader screenshots are saved per-book under /screenshots/<BookTitle>/, while
-// home/menu screenshots land flat in /screenshots/. Recurse so both show up.
-async function scanScreenshots(dirPath) {
+// home/menu screenshots land flat in /screenshots/. Recurse one level so both show up.
+async function scanScreenshots(dirPath, depth = 0) {
+  if (depth > 2) return [];
   const res = await fetch('/api/files?path=' + encodeURIComponent(dirPath));
   if (!res.ok) return [];
   const entries = await res.json();
@@ -39,7 +40,7 @@ async function scanScreenshots(dirPath) {
   for (const entry of entries) {
     const fullPath = (dirPath === '/' ? '' : dirPath) + '/' + entry.name;
     if (entry.isDirectory) {
-      const sub = await scanScreenshots(fullPath);
+      const sub = await scanScreenshots(fullPath, depth + 1);
       results.push(...sub);
     } else if (entry.name.toLowerCase().endsWith('.bmp')) {
       results.push({ name: entry.name, path: fullPath });
@@ -76,7 +77,8 @@ async function loadScreenshots() {
 
 // ── Book list ───────────────────────────────────────────────────────────────
 // Recursively walk a directory via /api/files and collect all EPUB file paths.
-async function scanDir(dirPath) {
+async function scanDir(dirPath, depth = 0) {
+  if (depth > 5) return [];
   const res = await fetch('/api/files?path=' + encodeURIComponent(dirPath));
   if (!res.ok) return [];
   const entries = await res.json();
@@ -84,7 +86,7 @@ async function scanDir(dirPath) {
   for (const entry of entries) {
     const fullPath = (dirPath === '/' ? '' : dirPath) + '/' + entry.name;
     if (entry.isDirectory) {
-      const sub = await scanDir(fullPath);
+      const sub = await scanDir(fullPath, depth + 1);
       results.push(...sub);
     } else if (entry.isEpub) {
       results.push({ name: entry.name, path: fullPath });

@@ -164,7 +164,7 @@ void EpubReaderClippingListActivity::onEnter() {
 }
 
 void EpubReaderClippingListActivity::onExit() {
-  NOTES.unload();
+  if (!bookPath.empty()) NOTES.unload();
   Activity::onExit();
 }
 

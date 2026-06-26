@@ -100,14 +100,18 @@ bool NoteStore::saveToFile(const std::string& path) const {
     obj["timestamp"] = note.timestamp;
     // tag: store as 1-char string, or omit if no tag
     if (note.tag != 0) {
-      char tagStr[2] = {note.tag, '\0'};
-      obj["tag"] = tagStr;
+      obj["tag"] = std::string(1, note.tag);
     }
   }
 
-  serializeJson(doc, file);
+  const size_t written = serializeJson(doc, file);
   file.sync();
   file.close();
+  if (written == 0) {
+    LOG_ERR(LOG_TAG, "serializeJson wrote 0 bytes to %s", tmpPath.c_str());
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
 
   // Atomic rename
   if (Storage.exists(path.c_str())) Storage.remove(path.c_str());

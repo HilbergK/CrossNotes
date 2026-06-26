@@ -1997,12 +1997,13 @@ void CrossPointWebServer::handleGetHighlights() const {
   server->sendContent("[");
 
   bool seenFirst = false;
+  JsonDocument doc;
 
   for (size_t i = 0; i < clippings.size(); ++i) {
     const auto& clipping = clippings[i];
     const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
 
-    JsonDocument doc;
+    doc.clear();
     doc["spineIndex"] = clipping.spineIndex;
     doc["startPage"] = clipping.startPage;
     doc["startWordIndex"] = clipping.startWordIndex;
@@ -2010,11 +2011,10 @@ void CrossPointWebServer::handleGetHighlights() const {
     doc["chapterTitle"] = clipping.chapterTitle;
     doc["text"] = clipping.text;
     if (note) {
-      JsonObject noteObj = doc["note"].to<JsonObject>();  // ArduinoJson 7 API
+      JsonObject noteObj = doc["note"].to<JsonObject>();
       noteObj["text"] = note->text;
       if (note->tag != 0) {
-        char tagStr[2] = {note->tag, '\0'};
-        noteObj["tag"] = tagStr;
+        noteObj["tag"] = std::string(1, note->tag);
       }
     } else {
       doc["note"] = nullptr;
