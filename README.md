@@ -1,81 +1,46 @@
 # CrossNotes
 
-> A fork of [CrossInk](https://github.com/uxjulia/CrossInk) that adds a phone-connected **highlights & notes system** to the Xteink X4 / X3.
-
-Highlight a passage, tag it with one button press, then open a page on your phone (over the device's own Wi-Fi hotspot — no app, no cloud, no account) to read your highlights and type full notes alongside them. Everything lives on the SD card.
+> ⚠️ **Not yet released.** This firmware has not been tested on a physical device. It compiles cleanly, but hardware testing is still pending. A release will be published once confirmed. Flash at your own risk — you can always revert via the CrossPoint web installer.
 
 ---
+
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) that adds phone-connected highlights & notes to the Xteink X4 / X3.
+
+Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. No app, no cloud, no account — everything lives on the SD card.
+
+## What it adds
+
+**On the device**
+- Tag picker after every highlight — `!` `?` `>` `<` `*` `~` or skip
+- Tags and note previews shown in the clipping list and detail view
+- **My Notes** home screen — lists books with highlights, jumps to clippings
+- **Quick Notes** home shortcut — starts hotspot, shows QR → opens notes on phone
+- **Screenshots** home shortcut — same, but opens the screenshot gallery
+
+**On your phone (just the browser)**
+- `/highlights` page: read each highlight and type a full note next to it
+- Tags shown alongside each highlight
+- Screenshots tab with gallery and one-tap download
 
 ## How it works
 
-1. **Highlight** a passage using the built-in clip selection.
-2. **Tag it** — a picker pops up immediately after saving; press once to tag or skip. Reading resumes.
-3. From the home menu, choose **Quick Notes** — a QR code appears.
-4. **Scan with your phone** — it joins the device's hotspot and opens the notes page directly.
-5. **Type your notes**; they save to the device. Tags and note previews now show in the device's clipping screens too.
+1. Highlight a passage in the reader
+2. Tag it (or skip) — reading resumes immediately
+3. Home → **Quick Notes** → scan the QR code with your phone
+4. Type your notes; they save to the device
 
-No internet, no companion app — the e-reader serves the page itself.
-
----
-
-## Status
-
-Not yet tested on a physical device. The firmware compiles and links cleanly, and every integration point was verified against the actual CrossInk source — but it hasn't been flashed and confirmed on a real X4. Will update once it's been run on hardware. If you test it before then, please open an issue with results.
-
-To revert at any time: reflash the official firmware via the CrossPoint web installer. No permanent changes.
-
----
-
-## What CrossNotes adds
-
-### On the device
-- **Highlight → tag** — after saving a highlight, a quick picker lets you tag it with one symbol:
-
-  | Tag | Meaning |
-  |-----|---------|
-  | `!` | Important |
-  | `?` | Question |
-  | `>` | Key argument |
-  | `<` | Counterpoint |
-  | `*` | Cite / reference later |
-  | `~` | Verify this claim |
-  | _(skip)_ | no tag |
-
-- **Notes in the clipping list** — tags and a written note preview appear under each highlight, on both the list and detail screens.
-- **My Notes** — home screen entry that lists every book with highlights and jumps straight into its clipping list.
-- **Quick Notes** — home shortcut that starts the hotspot and shows a QR code opening your phone directly on the notes page.
-- **Screenshots** — home shortcut that does the same, landing on the screenshot gallery.
-
-### On your phone (just the browser)
-- **`/highlights`** page in the device's built-in web portal: pick a book, read each highlight, and add or edit a full written note next to it. Notes save back to the device.
-- Tags shown next to each highlight.
-- **Screenshots tab** — gallery of device screenshots (including per-book reader screenshots) with one-tap download.
-
----
-
-## Building & flashing
-
-Builds with PlatformIO, same as CrossInk. Prebuilt `.bin` files will be published to [Releases](https://github.com/HilbergK/CrossNotes/releases) once the firmware is confirmed on hardware — for now, build from source:
+## Building
 
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
-pio run -e tiny          # or teensy / xlarge
-pio run -e tiny --target upload
+pio run -e tiny    # or teensy / xlarge
 ```
 
-> **Windows:** build from PowerShell or CMD, not Git Bash — the ESP32 toolchain rejects the MSYS environment.
+> Build from PowerShell or CMD on Windows — not Git Bash.
 
-Flash with the [CrossPoint web installer](./docs/installation.md) once a Release is up — no toolchain needed.
+Prebuilt `.bin` files will be on the [Releases page](https://github.com/HilbergK/CrossNotes/releases) once hardware-tested. Flash via the [CrossPoint web installer](./docs/installation.md).
 
-> **Flash budget:** this build sits at ~97% of the flash partition. It fits, but that's the ceiling.
+## Credits
 
----
-
-## Credits & license
-
-- **[CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** — the firmware this is all based on.
-- **[CrossInk](https://github.com/uxjulia/CrossInk)** — the fork this builds on, which adds custom fonts and reader polish. Everything from CrossInk is still here unchanged.
-- CrossInk Notes feature work developed with assistance from Claude (Anthropic).
-
-MIT License (© 2025 Dave Allie) — see [LICENSE](./LICENSE). Notes/tags/web-UI additions released under the same license.
+Built on [CrossInk](https://github.com/uxjulia/CrossInk) (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude (Anthropic). MIT License.
