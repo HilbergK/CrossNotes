@@ -5,9 +5,11 @@ nav_order: 14
 
 # Installation
 
+> **Status:** CrossNotes is a build-verified **beta** that has not yet been confirmed on a physical device. Prebuilt releases will be published once a build is tested on hardware. Until then you can build from source (see the [README](../README.md#building--flashing)) or flash a beta `.bin` if one is provided. Flashing only writes the app partition and is reversible — you can always reflash the official firmware.
+
 ## Web Installer
 
-1. Download the `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/uxjulia/CrossInk/releases).
+1. Download a `firmware-*.bin` file for the build variant of your choosing from the [releases page](https://github.com/HilbergK/CrossNotes/releases) (or use a beta `.bin` provided in an issue/discussion).
 2. Connect your Xteink X4 or X3 to your computer via USB-C and wake/unlock the device.
 3. Go to <https://crosspointreader.com/#flash-tools> and choose your device.
 4. Select **Custom .bin** from the options.
@@ -25,7 +27,7 @@ Install `esptool`:
 pip3 install esptool
 ```
 
-Download the `firmware-*.bin` file from the [releases page](https://github.com/uxjulia/CrossInk/releases), then connect your device with USB-C.
+Download the `firmware-*.bin` file from the [releases page](https://github.com/HilbergK/CrossNotes/releases), then connect your device with USB-C.
 
 Find the device port:
 
