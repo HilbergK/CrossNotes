@@ -117,6 +117,10 @@ class CrossPointWebServer {
   void handleFontUploadData();
   void handleFontDelete();
 
+  // Highlights and Notes handlers (CrossInk Notes)
+  void handleGetHighlights() const;
+  void handlePostNote();
+
   // Font upload state
   struct FontUploadState {
     HalFile file;

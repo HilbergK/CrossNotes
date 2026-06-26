@@ -14,6 +14,7 @@
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
+#include "home/NotesHomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "home/RecentBooksGridActivity.h"
 #include "network/CrossPointWebServerActivity.h"
@@ -203,6 +204,18 @@ void ActivityManager::goToJoinNetworkFileTransfer(std::string returnBookPath) {
 void ActivityManager::goToHotspotFileTransfer(std::string returnBookPath) {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CREATE_HOTSPOT,
                                                                 std::move(returnBookPath)));
+}
+
+void ActivityManager::goToQuickNotes() {
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CREATE_HOTSPOT,
+                                                                std::string{}, "highlights"));
+}
+
+void ActivityManager::goToNotesHome() { replaceActivity(std::make_unique<NotesHomeActivity>(renderer, mappedInput)); }
+
+void ActivityManager::goToScreenshots() {
+  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CREATE_HOTSPOT,
+                                                                std::string{}, "highlights#screenshots"));
 }
 
 void ActivityManager::goToNearbyStatsSync() {

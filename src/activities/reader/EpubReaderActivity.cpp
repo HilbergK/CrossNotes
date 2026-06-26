@@ -37,6 +37,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "NoteStore.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
@@ -44,6 +45,7 @@
 #include "SdCardFontSystem.h"
 #include "WordRef.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
+#include "activities/reader/TagPickerActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "clippings/ClippingsManager.h"
@@ -2711,17 +2713,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::VIEW_CLIPPINGS: {
       pauseReadingPaceTimer("clipping_list");
-      startActivityForResult(
-          std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              const auto& clipping = std::get<ClippingJumpResult>(result.data);
-              handleClippingJump(clipping);
-            } else {
-              resumeReadingPaceTimer("clipping_list_cancel");
-            }
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<EpubReaderClippingListActivity>(
+                                 renderer, mappedInput, CLIPPINGS.getClippings(), getCurrentBookPath()),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const auto& clipping = std::get<ClippingJumpResult>(result.data);
+                                 handleClippingJump(clipping);
+                               } else {
+                                 resumeReadingPaceTimer("clipping_list_cancel");
+                               }
+                               requestUpdate();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_BOOKMARKS: {
@@ -2925,8 +2927,33 @@ void EpubReaderActivity::startClipSelection() {
               }
             }
             const bool saved = addResult == ClippingStore::AddResult::Added && exported;
+
+            if (saved) {
+              // Capture clipping coordinates before the outer lambda's stack unwinds
+              const Clipping& newClipping = CLIPPINGS.getClippings()[clippingIndex];
+              const uint16_t tagSpine = newClipping.spineIndex;
+              const uint16_t tagPage = newClipping.startPage;
+              const uint16_t tagWord = newClipping.startWordIndex;
+
+              startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput),
+                                     [this, tagSpine, tagPage, tagWord](const ActivityResult& tagRes) {
+                                       if (!tagRes.isCancelled) {
+                                         const auto& tagResult = std::get<TagResult>(tagRes.data);
+                                         if (tagResult.tag != 0) {
+                                           NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord,
+                                                         tagResult.tag);
+                                         }
+                                       }
+                                       drawToast(renderer, tr(STR_CLIPPING_SAVED));
+                                       delay(1000);
+                                       resumeReadingPaceTimer("clip_selection_return");
+                                       requestUpdate();
+                                     });
+              return;  // Toast and timer resume are handled inside the tag picker's result handler
+            }
+
+            // Clipping failed or hit the limit — show error toast and fall through
             drawToast(renderer, addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
-                                : saved                                             ? tr(STR_CLIPPING_SAVED)
                                                                                     : tr(STR_CLIPPING_FAILED));
             delay(1000);
           }

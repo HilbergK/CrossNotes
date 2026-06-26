@@ -13,7 +13,7 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int ROW_HEIGHT = 56;
+constexpr int ROW_HEIGHT = 72;
 constexpr int LIST_START_Y = 60;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
@@ -157,7 +157,15 @@ void EpubReaderClippingListActivity::onEnter() {
   selectedIndex = 0;
   detailText.reserve(CLIPPING_TEXT_MAX);
   detailLines.reserve(32);
+  if (!bookPath.empty()) {
+    NOTES.loadForBook(bookPath.c_str(), "epub");
+  }
   requestUpdate();
+}
+
+void EpubReaderClippingListActivity::onExit() {
+  NOTES.unload();
+  Activity::onExit();
 }
 
 int EpubReaderClippingListActivity::getDetailTextWidth() const {
@@ -416,6 +424,27 @@ void EpubReaderClippingListActivity::renderDetail() {
                       renderer.getScreenHeight() - 35, pageBuf);
   }
 
+  if (!clippings.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
+    const Clipping& clipping = clippings[selectedIndex];
+    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    if (note != nullptr) {
+      const int noteY = renderer.getScreenHeight() - DETAIL_BOTTOM_RESERVE - 20;
+      const int noteX = contentX + DETAIL_SIDE_MARGIN;
+      const int noteWidth = contentWidth - DETAIL_SIDE_MARGIN * 2;
+      std::string noteSnippet;
+      if (note->tag != 0) {
+        noteSnippet += "[";
+        noteSnippet += note->tag;
+        noteSnippet += "] ";
+      }
+      std::string textSnippet;
+      buildOneLineSnippetText(note->text, textSnippet);
+      noteSnippet += textSnippet;
+      const std::string noteTrunc = renderer.truncatedText(SMALL_FONT_ID, noteSnippet.c_str(), noteWidth);
+      renderer.drawText(SMALL_FONT_ID, noteX, noteY, noteTrunc.c_str());
+    }
+  }
+
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), detailPage > 0 ? tr(STR_DIR_UP) : "",
                                             detailPage < detailPageCount - 1 ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
@@ -480,7 +509,22 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
 
     const char* chapter = clipping.chapterTitle[0] != '\0' ? clipping.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
     const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
-    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 31, chapterTrunc.c_str(), !isSelected);
+    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 24, chapterTrunc.c_str(), !isSelected);
+
+    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    if (note != nullptr) {
+      std::string noteSnippet;
+      if (note->tag != 0) {
+        noteSnippet += "[";
+        noteSnippet += note->tag;
+        noteSnippet += "] ";
+      }
+      std::string textSnippet;
+      buildOneLineSnippetText(note->text, textSnippet);
+      noteSnippet += textSnippet;
+      const std::string noteTrunc = renderer.truncatedText(SMALL_FONT_ID, noteSnippet.c_str(), contentWidth - 40);
+      renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 46, noteTrunc.c_str(), !isSelected);
+    }
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

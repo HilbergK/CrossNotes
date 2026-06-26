@@ -16,8 +16,10 @@
 #include <iterator>
 
 #include "AppVersion.h"
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
+#include "NoteStore.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
@@ -25,6 +27,7 @@
 #include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
+#include "html/HighlightsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/LogoPng.generated.h"
 #include "html/SettingsPageHtml.generated.h"
@@ -205,6 +208,14 @@ void CrossPointWebServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
   server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+
+  // Highlights & Notes endpoints (CrossInk Notes)
+  server->on("/highlights", HTTP_GET, [this] {
+    server->sendHeader("Content-Encoding", "gzip");
+    server->send_P(200, "text/html", HighlightsPageHtml, HighlightsPageHtmlCompressedSize);
+  });
+  server->on("/api/highlights", HTTP_GET, [this] { handleGetHighlights(); });
+  server->on("/api/notes", HTTP_POST, [this] { handlePostNote(); });
 
   // Font management endpoints
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
@@ -581,8 +592,18 @@ void CrossPointWebServer::handleDownload() const {
   }
 
   String contentType = "application/octet-stream";
+  bool inlineDisposition = false;
   if (isEpubFile(itemPath)) {
     contentType = "application/epub+zip";
+  } else {
+    String lowerPath = itemPath;
+    lowerPath.toLowerCase();
+    if (lowerPath.endsWith(".bmp")) {
+      // Serve screenshots as a real image type with inline disposition so the
+      // phone Screenshots gallery can render them as <img> thumbnails.
+      contentType = "image/bmp";
+      inlineDisposition = true;
+    }
   }
 
   char nameBuf[128] = {0};
@@ -592,7 +613,9 @@ void CrossPointWebServer::handleDownload() const {
   }
 
   server->setContentLength(file.size());
-  server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  server->sendHeader(
+      "Content-Disposition",
+      (inlineDisposition ? String("inline; filename=\"") : String("attachment; filename=\"")) + filename + "\"");
   server->send(200, contentType.c_str(), "");
 
   NetworkClient client = server->client();
@@ -1949,4 +1972,110 @@ void CrossPointWebServer::handleFontDelete() {
     server->send(500, "application/json", "{\"error\":\"Delete failed\"}");
     LOG_ERR("WEB", "Failed to delete font family: %s", familyName);
   }
+}
+
+// ─── Highlights & Notes (CrossInk Notes) ──────────────────────────────────────
+
+void CrossPointWebServer::handleGetHighlights() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path parameter");
+    return;
+  }
+
+  const String path = server->arg("path");
+
+  // ClippingStore::loadForBook takes (filePath, title, author, bookType).
+  // The web UI does not need title/author, so pass empty strings.
+  CLIPPINGS.loadForBook(path.c_str(), "", "", "epub");
+  NOTES.loadForBook(path.c_str(), "epub");
+
+  const auto& clippings = CLIPPINGS.getClippings();
+
+  // Stream the JSON array incrementally to avoid building the whole response in RAM.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  bool seenFirst = false;
+
+  for (size_t i = 0; i < clippings.size(); ++i) {
+    const auto& clipping = clippings[i];
+    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+
+    JsonDocument doc;
+    doc["spineIndex"] = clipping.spineIndex;
+    doc["startPage"] = clipping.startPage;
+    doc["startWordIndex"] = clipping.startWordIndex;
+    doc["timestamp"] = clipping.timestamp;
+    doc["chapterTitle"] = clipping.chapterTitle;
+    doc["text"] = clipping.text;
+    if (note) {
+      JsonObject noteObj = doc["note"].to<JsonObject>();  // ArduinoJson 7 API
+      noteObj["text"] = note->text;
+      if (note->tag != 0) {
+        char tagStr[2] = {note->tag, '\0'};
+        noteObj["tag"] = tagStr;
+      }
+    } else {
+      doc["note"] = nullptr;
+    }
+
+    // Heap String (not a fixed stack buffer) to safely handle long text on the C3.
+    String output;
+    serializeJson(doc, output);
+
+    if (seenFirst) {
+      server->sendContent(",");
+    } else {
+      seenFirst = true;
+    }
+    server->sendContent(output);
+  }
+
+  server->sendContent("]");
+  server->sendContent("");  // Empty chunk signals end of stream
+
+  CLIPPINGS.unload();
+  NOTES.unload();
+
+  LOG_DBG("WEB", "Served highlights API for path: %s", path.c_str());
+}
+
+void CrossPointWebServer::handlePostNote() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  const std::string path = doc["path"] | std::string("");
+  const uint16_t spineIndex = doc["spineIndex"] | 0;
+  const uint16_t startPage = doc["startPage"] | 0;
+  const uint16_t startWordIndex = doc["startWordIndex"] | 0;
+  const std::string text = doc["text"] | std::string("");
+
+  if (path.empty()) {
+    server->send(400, "text/plain", "Missing book path");
+    return;
+  }
+
+  NOTES.loadForBook(path.c_str(), "epub");
+
+  if (text.empty()) {
+    NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex);
+  } else {
+    NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, text.c_str());
+  }
+
+  NOTES.unload();
+
+  server->send(200, "text/plain", "OK");
+  LOG_DBG("WEB", "Saved note for path: %s", path.c_str());
 }

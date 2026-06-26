@@ -53,6 +53,9 @@ enum class HomeMenuAction {
   ReadingStats,
   Bookmarks,
   FileTransfer,
+  MyNotes,      // CrossInk Notes (Session 7)
+  QuickNotes,   // CrossInk Notes (Session 5)
+  Screenshots,  // CrossInk Notes (Session 9)
   Settings,
 };
 
@@ -63,7 +66,7 @@ struct HomeMenuEntry {
 };
 
 struct HomeMenuEntries {
-  static constexpr int kCapacity = 8;
+  static constexpr int kCapacity = 11;
   std::array<HomeMenuEntry, kCapacity> entries{};
   int count = 0;
 
@@ -222,6 +225,9 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
+  items.push({"My Notes", BookmarkIcon, HomeMenuAction::MyNotes});
+  items.push({"Quick Notes", Transfer, HomeMenuAction::QuickNotes});
+  items.push({"Screenshots", Transfer, HomeMenuAction::Screenshots});
   items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});
 }
 
@@ -509,7 +515,7 @@ static_assert(HomeActivity::kMaxCachedBooks >= LyraCarouselMetrics::values.homeR
 
 int HomeActivity::getMenuItemCount() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 7;  // File Browser, Recents, File transfer, Settings, My Notes, Quick Notes, Screenshots
   if (!metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     count += getVisibleRecentBookCount();
   } else if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -1346,6 +1352,15 @@ void HomeActivity::loop() {
           case HomeMenuAction::FileTransfer:
             onFileTransferOpen();
             break;
+          case HomeMenuAction::MyNotes:
+            activityManager.goToNotesHome();
+            break;
+          case HomeMenuAction::QuickNotes:
+            activityManager.goToQuickNotes();
+            break;
+          case HomeMenuAction::Screenshots:
+            activityManager.goToScreenshots();
+            break;
           case HomeMenuAction::ContinueReading:
           case HomeMenuAction::Settings:
             break;
@@ -1537,6 +1552,15 @@ void HomeActivity::loop() {
         break;
       case HomeMenuAction::FileTransfer:
         onFileTransferOpen();
+        break;
+      case HomeMenuAction::MyNotes:
+        activityManager.goToNotesHome();
+        break;
+      case HomeMenuAction::QuickNotes:
+        activityManager.goToQuickNotes();
+        break;
+      case HomeMenuAction::Screenshots:
+        activityManager.goToScreenshots();
         break;
       case HomeMenuAction::Settings:
         onSettingsOpen();

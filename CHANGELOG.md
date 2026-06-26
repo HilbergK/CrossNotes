@@ -1,5 +1,17 @@
 # Changelog
-## [v1.3.4] - 2026-06-24
+## [Unreleased] - CrossInk Notes
+
+### Added
+- **Notes on highlights**: every saved clipping can carry a written note. Notes are stored on the SD card under `/.crosspoint/notes/` and shown beneath each clipping in the on-device clipping list and detail views.
+- **On-device tag picker**: after saving a highlight, a quick picker lets you tag it with a single symbol — `!` important, `?` question, `>` key argument, `<` counterpoint, `*` cite, `~` verify, or skip — without typing.
+- **Phone notes UI**: a new `/highlights` page in the device web portal lists every book with highlights and lets you read each highlight and add/edit a full written note from your phone (`GET /api/highlights`, `POST /api/notes`).
+- **Quick Notes** home shortcut: starts a hotspot and shows a QR code that opens directly on the phone Notes page.
+- **My Notes** home screen: lists every book that has highlights and opens its clipping/notes list directly, without opening the book first.
+- **Screenshot browser**: a Screenshots tab in the phone web UI shows a gallery of device screenshots (including per-book reader screenshots) with one-tap download.
+- **Screenshots** home shortcut: QR code that opens the phone web UI directly on the Screenshots tab.
+
+### Fixed
+- Tag picker now suppresses the Back release on cancel so it does not leak an input to the reader underneath.
 
 ### Added
 - File Browser now indexes large SD-card folders so directories with many books can be browsed without loading every filename into memory at once.

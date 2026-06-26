@@ -4,21 +4,26 @@
 #include <vector>
 
 #include "ClippingStore.h"
+#include "NoteStore.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderClippingListActivity final : public Activity {
  public:
   EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 std::vector<Clipping> clippings)
-      : Activity("EpubClippingList", renderer, mappedInput), clippings(std::move(clippings)) {}
+                                 std::vector<Clipping> clippings, std::string bookPath = {})
+      : Activity("EpubClippingList", renderer, mappedInput),
+        clippings(std::move(clippings)),
+        bookPath(std::move(bookPath)) {}
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
   std::vector<Clipping> clippings;
+  std::string bookPath;
   std::string detailText;
   std::vector<std::string> detailLines;
   ButtonNavigator buttonNavigator;

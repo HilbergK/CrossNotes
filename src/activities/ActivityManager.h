@@ -93,6 +93,9 @@ class ActivityManager {
   void goToCalibreWireless(std::string returnBookPath = {});
   void goToJoinNetworkFileTransfer(std::string returnBookPath = {});
   void goToHotspotFileTransfer(std::string returnBookPath = {});
+  void goToQuickNotes();   // CrossInk Notes (Session 5)
+  void goToNotesHome();    // CrossInk Notes — My Notes home (Session 7)
+  void goToScreenshots();  // CrossInk Notes — Screenshots shortcut (Session 9)
   void goToNearbyStatsSync();
   void goToSettings();
   void goToFileBrowser(std::string path = {});

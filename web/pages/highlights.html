@@ -1,0 +1,30 @@
+<div id="message" class="message"></div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('notes', this)">Notes</button>
+  <button class="tab-btn" onclick="switchTab('screenshots', this)">Screenshots</button>
+</div>
+
+<div id="tab-notes" class="tab-content active">
+  <div id="highlights-layout">
+    <div id="book-sidebar">
+      <h2>Books</h2>
+      <div id="book-list">
+        <div class="loader-container"><span class="loader"></span></div>
+      </div>
+    </div>
+
+    <div id="highlights-main">
+      <div id="highlights-empty-state">
+        <p class="empty-hint">Select a book to view its highlights.</p>
+      </div>
+      <div id="highlights-container" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-screenshots" class="tab-content" style="display:none;">
+  <div id="screenshot-gallery">
+    <div class="loader-container"><span class="loader"></span></div>
+  </div>
+</div>

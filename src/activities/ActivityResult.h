@@ -111,10 +111,14 @@ struct ClippingJumpResult {
   bool settingsChanged = false;
 };
 
+struct TagResult {
+  char tag = 0;  // 0 = skipped. Otherwise: '!' '?' '>' '<' '*' '~'
+};
+
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
                                    IntervalResult, OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult,
                                    NetworkModeResult, FootnoteResult, BookmarkResult, FileBrowserActionResult,
-                                   FilePathResult, ReadingStatsResult, ClippingResult, ClippingJumpResult>;
+                                   FilePathResult, ReadingStatsResult, ClippingResult, ClippingJumpResult, TagResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

@@ -28,8 +28,9 @@ JS_OUT = os.path.join(OUT, "js")
 PAGES = {
     "home":     ("HomePageHtml",     "CrossInk",                   "home",     ""),
     "files":    ("FilesPageHtml",    "Files - CrossInk",           "files",    '  <script src="/js/jszip.min.js"></script>'),
-    "settings": ("SettingsPageHtml", "Settings - CrossInk Reader", "settings", ""),
-    "fonts":    ("FontsPageHtml",    "Fonts - CrossInk",           "fonts",    ""),
+    "settings":   ("SettingsPageHtml",   "Settings - CrossInk Reader", "settings",   ""),
+    "fonts":      ("FontsPageHtml",      "Fonts - CrossInk",           "fonts",      ""),
+    "highlights": ("HighlightsPageHtml", "Highlights - CrossInk",      "highlights", ""),
 }
 
 PRESERVE_TAGS = "pre|code|textarea|script|style"
@@ -97,7 +98,7 @@ for slug, (ident, title, active, head_extra) in PAGES.items():
     values = {
         "title": title, "v": v, "head_extra": head_extra,
         "styles": page_css, "body": page_html, "script": script,
-        "cls_home": "", "cls_files": "", "cls_settings": "", "cls_fonts": "",
+        "cls_home": "", "cls_files": "", "cls_settings": "", "cls_fonts": "", "cls_highlights": "",
     }
     values[f"cls_{active}"] = ' class="active"'
     html = minify_html(render(base, values))
