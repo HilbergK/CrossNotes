@@ -1,54 +1,20 @@
 # Changelog
-## [Unreleased] - CrossInk Notes
+
+## [Unreleased] — CrossNotes
 
 ### Added
+- **On-device tag picker**: after saving a highlight, a quick picker lets you tag it with a single symbol — `!` important, `?` question, `>` key argument, `<` counterpoint, `*` cite, `~` verify, or skip.
 - **Notes on highlights**: every saved clipping can carry a written note. Notes are stored on the SD card under `/.crosspoint/notes/` and shown beneath each clipping in the on-device clipping list and detail views.
-- **On-device tag picker**: after saving a highlight, a quick picker lets you tag it with a single symbol — `!` important, `?` question, `>` key argument, `<` counterpoint, `*` cite, `~` verify, or skip — without typing.
 - **Phone notes UI**: a new `/highlights` page in the device web portal lists every book with highlights and lets you read each highlight and add/edit a full written note from your phone (`GET /api/highlights`, `POST /api/notes`).
-- **Quick Notes** home shortcut: starts a hotspot and shows a QR code that opens directly on the phone Notes page.
-- **My Notes** home screen: lists every book that has highlights and opens its clipping/notes list directly, without opening the book first.
 - **Screenshot browser**: a Screenshots tab in the phone web UI shows a gallery of device screenshots (including per-book reader screenshots) with one-tap download.
+- **My Notes** home screen: lists every book that has highlights and opens its clipping/notes list directly, without opening the book first.
+- **Quick Notes** home shortcut: starts a hotspot and shows a QR code that opens directly on the phone Notes page.
 - **Screenshots** home shortcut: QR code that opens the phone web UI directly on the Screenshots tab.
 
 ### Fixed
-- Tag picker now suppresses the Back release on cancel so it does not leak an input to the reader underneath.
+- Tag picker suppresses the Back release on cancel so it does not leak an input to the reader underneath.
 
-### Added
-- File Browser now indexes large SD-card folders so directories with many books can be browsed without loading every filename into memory at once.
-- EPUB text clipping with saved highlights, clipping lists, and Kindle-style `/My Clippings.txt` export.
-- `Create Clipping` is now available as a reader shortcut for short/long Power, long-press Menu, and long-press Back actions.
-- Per-book EPUB options for font, layout, styling, reading aids, and render modes, including `CrossInk Default`, `Balanced`, and `Light` modes for difficult books.
-- Arena allocator (`lib/Memory/Arena.h`) for burst-then-discard allocation patterns - reduces heap fragmentation during EPUB parsing and page layout over long reading sessions.
-- Optimized EPUBs now store location metadata at `META-INF/x-locations.json`.
-- X3 SD-card writes now use the RTC for file timestamps when the clock is available.
-
-### Changed
-- The EPUB reader menu now splits the growing menu into 3 screens, labels per-book settings as `Book Options`, and avoids showing duplicate `Orientation` controls.
-- The `Inverted` sleep cover filter now flips Minimal and Reading Stats sleep screens to black text on a white background.
-
-### Fixed
-- Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
-- X3 Tilt Direction now labels left/right choices as `Left-Right` and `Right-Left`, with existing left/right preferences migrated to keep the same physical tilt behavior.
-- EPUB layout now honors publisher page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.
-- EPUB first-open conversion now uses more compact OPF manifest lookups and streams cover-wrapper parsing to avoid large temporary heap buffers on books with huge manifests.
-- EPUB chapters that run out of memory now retry with `Balanced`, `Light`, and final `Safe Mode` rendering before showing an error, apply the same fallbacks during next-chapter pre-indexing, and let book action menus reset a book's reader settings if Safe Mode still cannot open it.
-- EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
-- Reading Stats now use the reader's last live book time-left estimate instead of showing a separate fallback estimate.
-- Per-book reading stats now migrate compatible legacy `stats.bin` files into the `stats_v5.bin` flow instead of resetting when only the old filename exists.
-- Lyra Carousel Home menu rendering now avoids extra label allocations that could crash builds under low memory.
-- Lyra Carousel Home cover refresh no longer risks a reboot when memory is tight after returning to or selecting a recent book.
-- EPUB image-heavy chapters no longer risk a reboot while saving their reading cache under low memory.
-- TXT readers now stay open when pressing a page-turn button at the end of the file.
-- Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
-- RoundedRaff's header battery icon and percentage now sit lower to avoid clipping at the top edge.
-- Lyra Carousel now keeps the Home header current when rendering the menu or restoring cached carousel frames, preventing stale battery and clock values while navigating between books.
-- Web file manager multi-delete now handles larger selections without failing after a small batch.
-- Portuguese EPUBs now use Portuguese hyphenation rules instead of leaving long words unhyphenated when Hyphenation is enabled.
-- Progressive JPEG EPUB covers now render more smoothly in generated cover and thumbnail BMP assets.
-- EPUB section layout now flushes long text runs earlier when Bionic Reading or Guide Dots are enabled, reducing low-memory failures on difficult books.
-- Footnotes in EPUBs with very large shared notes sections no longer cause long stalls when opened.
-- Firmware updates now follow GitHub asset redirects before streaming the install.
-- Tiled grayscale rendering now serializes display transfers on the shared SPI bus to avoid display glitches during SD activity.
+---
 
 ## [v1.3.3] - 2026-06-13
 
@@ -156,15 +122,15 @@
 ## [v1.2.11.1] - 2026-05-15
 
 ### Changed
-- Removed Medium font size from `xlarge` build to get it below the size limit
+- Removed Medium font size from `xlarge` build to get it below the size limit.
 
 ### Fixed
-- Lyra Carousel is now included by activating the build flag `DCROSSINK_ENABLE_LYRA_CAROUSEL=1`
----
+- Lyra Carousel is now included by activating the build flag `DCROSSINK_ENABLE_LYRA_CAROUSEL=1`.
+
 ## [v1.2.11] - 2026-05-14
 
 ### Added
-- New personal theme: "Minimal"
+- New personal theme: "Minimal".
 - Custom sleep timer picker so `Time to Sleep` can be set from 1 to 30 minutes instead of cycling fixed presets.
 - In-reader Controls shortcut for customizing buttons without leaving the book.
 - Bookmark cleanup shortcuts: hold Select on a bookmark to delete it, or hold Open on a book in Bookmarks to clear that book's bookmark list.
@@ -217,12 +183,12 @@
 - Concurrent render/storage crashes are avoided by serializing `GfxRenderer` scratch-buffer access, shared SPI bus access, and failed SPI lock cleanup.
 - Recent Books, EPUB/XTC thumbnail caches, deleted-folder metadata, and XTC cover scaling now keep cached book data in sync and grid covers fill their slots correctly.
 - Simulator build configuration now lets SDL2 and simulator-provided network/OTA shims compile cleanly.
----
+
 ## [v1.2.9.1] - 2026-05-03
 
 ### Changed
-- Cleaned up EPUB table rendering by removing synthetic row/cell labels and defaulting table cells to readable left alignment
-- Allow simple EPUB tables with full-width note rows so a single `colspan` cell spanning the whole table no longer forces the entire table back to paragraph fallback
+- Cleaned up EPUB table rendering by removing synthetic row/cell labels and defaulting table cells to readable left alignment.
+- Allow simple EPUB tables with full-width note rows so a single `colspan` cell spanning the whole table no longer forces the entire table back to paragraph fallback.
 
 ### Fixed
 - Power-button shortcut conflicts outside the reader so reader-only actions fall back to `Confirm` while Sleep, Refresh, Screenshot, Sync Progress, and File Transfer remain real power actions.
