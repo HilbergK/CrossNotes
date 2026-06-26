@@ -225,7 +225,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
-  items.push({"My Notes", BookmarkIcon, HomeMenuAction::MyNotes});
+  items.push({"My Highlights", BookmarkIcon, HomeMenuAction::MyNotes});
   items.push({"Quick Notes", Transfer, HomeMenuAction::QuickNotes});
   items.push({"Screenshots", Transfer, HomeMenuAction::Screenshots});
   items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});

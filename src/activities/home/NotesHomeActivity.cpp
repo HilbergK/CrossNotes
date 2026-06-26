@@ -34,7 +34,6 @@ void NotesHomeActivity::reloadNotedBooks() {
 void NotesHomeActivity::onEnter() {
   Activity::onEnter();
   reloadNotedBooks();
-  selectedIndex = 0;
   requestUpdate();
 }
 
