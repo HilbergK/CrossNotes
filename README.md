@@ -1,116 +1,112 @@
-!!!!!!!!!!!!! WORK IN PROGRESS !!!!!!!!!!!
+# CrossNotes
 
-> **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
+> A fork of [CrossInk](https://github.com/uxjulia/CrossInk) / [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for the **Xteink X4 / X3** e-reader that adds a phone-connected **highlights & notes system** — layered on top of a custom-font reading fork.
 
-## What's different in this fork
-
-My goal with this fork was to maintain the core Crosspoint firmware while integrating my preferred typography and some lightweight reading statistics. I’ve focused on keeping the underlying system stable while layering in a few "nice-to-have" features and UI refinements along the way.
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="./docs/images/bitter-small-15-margin.jpg" alt="Font: Bitter, Size: 12 pt, Margin: 15" /><br/>
-      <em>Font: Bitter, Size: 12 pt, Margin: 15</em>
-    </td>
-    <td align="center">
-      <img src="./docs/images/reading-stats.jpg" alt="Reading Stats with custom front button mapping shown" /><br/>
-      <em>Reading Stats with custom front button mapping shown</em>
-    </td>
-  </tr>
-</table>
+Highlight a passage on the device, tag it with one button press, then open a page on your phone (over the device's own Wi-Fi hotspot — no app, no cloud, no account) to read your highlights and type full notes alongside them. Everything is stored locally on the SD card.
 
 ---
 
-**Note**: This firmware is confirmed to be working on both the X3 and X4.
+## ⚠️ Status: build-verified beta — not yet hardware-tested
 
-### Highlights
+Be honest with yourself before flashing this:
 
-- New reader fonts: ChareInk, Lexend Deca, and Bitter.
-- Unicode emoji and miscellaneous symbols support (a limited subset).
-- Adjusted font sizes: 8 pt, 9 pt, 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. See [Font Build Variants](./docs/font-build-variants.md) for more details.
-- Added ~~strikethrough~~ support.
-- Made <u>underlines</u> thicker for better visibility.
-- Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
-- Added support for `<hr>` section breaks.
-- Added support for "redaction" style rendering.
-- Added improved support for tables with simple markup.
-- Added ability to add bookmarks.
-- Added ability to remap front buttons that only applies in the reader.
-- Added Bionic Reading and Guide Dots as optional reader modes.
-- Added Force Paragraph Indents for books that render as one giant wall of text.
-- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available).
-- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions.
-- Added ability to mark a book as finished from the in-book menu. A pop-up will also display once 99% of the book is reached. This status allows tracking of total books read.
-- Added ability to move finished books to "Read" folder.
-- In-book menu to quickly adjust reader options without having to exit the book.
-- Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- Reading stats [syncing](./docs/reading-stats-sync.md) between two devices.
-- Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
-- Added ability to view Recent Books as a 3x3 grid view.
-- To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
+- ✅ **It compiles and links cleanly** into a flashable ESP32-C3 image, and every feature was verified against the actual firmware source (APIs, activity lifecycle, web endpoints).
+- ❌ **It has not yet been run on a physical Xteink X4.** "Compiles" is not the same as "works on the device." The on-device tag picker, the hotspot/QR flow, and the phone notes UI still need a real flash-and-check.
+
+If you flash this, treat it as a **beta you are helping test**. The CrossPoint web installer flashes only the app partition and is fully reversible (you can reflash stock firmware), so the risk is low — but the features are unconfirmed until someone runs them on hardware. If you test it, please open an issue with what worked and what didn't. 🙏
 
 ---
+
+## What CrossNotes adds
+
+### On the device
+- **Highlight → tag** — after you save a highlight, a quick picker lets you tag it with a single symbol, no typing:
+  | Tag | Meaning |
+  |-----|---------|
+  | `!` | Important |
+  | `?` | Question |
+  | `>` | Key argument |
+  | `<` | Counterpoint |
+  | `*` | Cite / reference later |
+  | `~` | Verify this claim |
+  | _(skip)_ | save with no tag |
+- **Notes in the clipping list** — tags and a preview of your written note appear under each highlight, on both the list and detail screens.
+- **My Notes** home screen — lists every book that has highlights and jumps straight into its highlights, without opening the book first.
+- **Quick Notes** home shortcut — starts the Wi-Fi hotspot and shows a QR code that opens your phone **directly** on the notes page.
+- **Screenshots** home shortcut — same idea, but the QR opens directly on the screenshot gallery.
+
+### On your phone (just the browser — nothing to install)
+- A **`/highlights`** page in the device's built-in web portal: pick a book, read each highlight, and **add or edit a full written note** in a text box next to it. Notes save back to the device's SD card.
+- On-device tags are shown next to each highlight.
+- A **Screenshots** tab that shows a gallery of device screenshots (including per-book reader screenshots) with one-tap download.
+
+---
+
+## How it works (the flow)
+
+1. **Read & highlight** a passage using the built-in clip selection.
+2. **Tag it** — the picker pops up; press once to tag (or skip). Reading resumes.
+3. Back at the home menu, choose **Quick Notes** → a QR code appears.
+4. **Scan it** with your phone — it joins the device's hotspot and opens the notes page.
+5. **Type your notes**; they sync to the device. Your tags and note previews now show on the device's clipping screens too.
+
+No account, no internet, no companion app — the e-reader serves the page itself over a local hotspot.
+
+---
+
+## Building & flashing
+
+CrossNotes builds with [PlatformIO](https://platformio.org/), exactly like upstream CrossInk.
+
+```sh
+# 1. Clone WITH submodules (the open-x4-sdk submodule is required, or the build fails)
+git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
+cd CrossNotes
+# (if you already cloned without it:  git submodule update --init --recursive )
+
+# 2. Build  (teensy / tiny / xlarge are font-size variants; pick one)
+pio run -e tiny
+
+# 3. Flash over USB-C
+pio run -e tiny --target upload
+```
+
+> **Windows note:** build from **PowerShell or CMD**, not Git Bash/MSYS — the ESP32 toolchain rejects the MSYS environment. (`pio run` works fine from PowerShell.)
+
+Prefer a no-build-tools route? Once a build is confirmed on hardware, prebuilt `firmware-*.bin` files can be flashed with the [CrossPoint web installer](./docs/installation.md) — no toolchain needed.
+
+> **Flash budget:** this build sits at ~97% of the flash partition. It fits, but that's the ceiling — keep an eye on it if you add more features.
+
+---
+
+## The reading fork underneath (fonts, sizes, reader features)
+
+CrossNotes is built on a custom-font CrossInk fork. Those features are unchanged and still here.
 
 ### Reader Fonts
+The default fonts are ChareInk, Lexend Deca, and Bitter — chosen for reading fluency and crisp e-ink rendering with reduced ghosting. The UI uses [Inter](https://fonts.google.com/specimen/Inter) for better readability at small sizes.
 
-The default fonts have been replaced with ChareInk, Lexend Deca, and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
+- [ChareInk](https://www.mobileread.com/forums/showthread.php?t=184056) — a long-time e-reading community favorite based on [Charis](https://software.sil.org/charis/).
+- [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) — a research-backed sans-serif designed to improve reading fluency.
+- [Bitter](https://fonts.google.com/specimen/Bitter) — a slab serif designed for comfortable on-screen reading; the medium weight renders well on the X4/X3.
 
-- [ChareInk](https://www.mobileread.com/forums/showthread.php?t=184056) - A cult favorite among the e-reading community for over a decade based off of the typeface [Charis](https://software.sil.org/charis/). It is specially designed to make long texts pleasant and easy to read.
-- [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) - A research-backed sans-serif typeface designed to improve reading fluency. Lexend was engineered based on the theory that reading issues are often a design problem (visual crowding) rather than a cognitive one.
-- [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4/X3.
-
-The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display font which has improved readability at smaller sizes.
-
-### Emojis and Misc Glyphs
-
-- Support for a limited set of Unicode [Emoticons](https://unicode-explorer.com/b/1F600) and [Miscellaneous Symbols](https://unicode-explorer.com/b/2600) using [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji) and [Noto Sans Symbols](https://fonts.google.com/noto/specimen/Noto+Sans+Symbols) font.
-
----
-
-### Font Sizes
-
-There are 3 available build variants to choose from due to build size constraints: `teensy`, `tiny`, and `xlarge`.
-
-See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
-
----
-
-### Reader features
-
-Reader Options, Bionic Reading, Guide Dots, Force Paragraph Indents, reading stats, and finished-book behavior are documented in [Reader Features](./docs/reader-features.md).
-
-### Custom button actions
-
-CrossInk adds configurable button shortcuts.
-
-See [Controls](./docs/controls.md) for the full action list and defaults.
+### Other reader features
+- Limited Unicode [emoji](https://unicode-explorer.com/b/1F600) and [misc symbols](https://unicode-explorer.com/b/2600) support (Noto Emoji / Noto Sans Symbols).
+- Adjustable font sizes across the `teensy`, `tiny`, and `xlarge` build variants — see [Font Build Variants](./docs/font-build-variants.md).
+- Strikethrough, thicker underlines, `<hr>` section breaks, redaction-style rendering, simple tables, bookmarks.
+- A custom `Minimal` theme and sleep screen.
+- Reader-only front-button remapping, Bionic Reading, Guide Dots, and Force Paragraph Indents — see [Reader Features](./docs/reader-features.md) and [Controls](./docs/controls.md).
 
 ---
 
 ## Tips for the best reading experience
 
-CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
+CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slow.
 
-- Keep folders under about 200  files. For the smoothest browsing, aim for 50-100 files per folder.
-- Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
-- Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
-- Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
-- As a rough target, EPUBs under 20 MB tend to work the best. Files over 50 MB may still work, but they are more likely to be slow or memory-sensitive, especially if they contain many large images.
-- If an EPUB is unusually slow, try [optimizing](./docs/webserver.md#epub-optimization) it with the built-in web optimizer (via File Transfer) before copying it to the SD card: remove unused high-resolution images, split very large omnibus files, and avoid embedding multiple full font families when possible.
-- Use a reliable SD card and leave some free space. CrossInk stores settings, reading progress, cache files, stats, and generated book data on the card.
-
-## Development Device Simulator
-
-The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
-
-See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
-
----
-## Installation
-
-Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
-
-See [Installation](./docs/installation.md) for step-by-step flashing and revert instructions.
+- Keep folders under ~200 files (50–100 is smoothest). 1000+ books is fine if split into subfolders.
+- Avoid dumping every book in the SD card root.
+- Text-first EPUBs work best; aim for under ~20 MB. Large image-heavy books may be slow or memory-sensitive.
+- Use a reliable SD card with some free space — settings, progress, caches, stats, **and now your notes** live there.
 
 ---
 
@@ -118,41 +114,20 @@ See [Installation](./docs/installation.md) for step-by-step flashing and revert 
 
 - [User Guide](./USER_GUIDE.md)
 - [Installation](./docs/installation.md)
+- [Web server usage](./docs/webserver.md) · [Web server endpoints](./docs/webserver-endpoints.md)
+- [Reader Features](./docs/reader-features.md) · [Controls](./docs/controls.md)
 - [Font Build Variants](./docs/font-build-variants.md)
-- [Reader Features](./docs/reader-features.md)
-- [Controls](./docs/controls.md)
-- [Simulator](./docs/simulator.md)
-- [Data Cache](./docs/data-cache.md)
-- [Web server usage](./docs/webserver.md)
-- [Web server endpoints](./docs/webserver-endpoints.md)
-- [Common issues](./docs/troubleshooting.md)
-- [Project scope](./SCOPE.md)
-- [Contributing docs](./docs/contributing/README.md)
+- [Simulator](./docs/simulator.md) · [Data Cache](./docs/data-cache.md)
+- [Common issues](./docs/troubleshooting.md) · [Project scope](./SCOPE.md)
 
 ---
 
-## Development quick start
+## Credits & license
 
-CrossInk uses PlatformIO for building and flashing firmware.
+CrossNotes stands on the shoulders of:
 
-See [Getting Started](./docs/contributing/getting-started.md) for prerequisites, clone setup, hooks, and validation commands.
+- **[CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** — the open-source e-reader firmware this is all based on.
+- **[CrossInk](https://github.com/uxjulia/CrossInk)** — the font/typography fork this builds on.
+- The CrossInk Notes feature work in this fork was developed with assistance from Claude (Anthropic).
 
-### Build / flash / monitor
-
-Connect your Xteink X4 or X3 via USB-C and run:
-
-```sh
-pio run -e tiny --target upload
-```
-
-Replace `tiny` with another build variant if needed. See [Font Build Variants](./docs/font-build-variants.md).
-
-See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
-
----
-
-## Internals
-
-The ESP32-C3 has about 380 KB of usable RAM, so CrossInk stores reusable book and device data on the SD card instead of rebuilding everything in memory.
-
-See [Data Cache](./docs/data-cache.md) for the `.crosspoint` layout and [File Formats](./docs/file-formats.md) for binary cache details.
+Licensed under the **MIT License** (© 2025 Dave Allie) — see [LICENSE](./LICENSE). The notes/tags/web-UI additions are released under the same license.
