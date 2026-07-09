@@ -25,6 +25,39 @@ Highlight a passage, tag it, then open a page on your phone (over the device's o
 3. Home → **Phone Notes** → scan the QR code with your phone
 4. Read your highlights and type notes; they save straight to the device
 
+## Screenshots
+
+<table>
+<tr>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/home-menu.jpg" width="220"><br>
+<sub>Home menu — <b>Notes and Bookmarks</b>, <b>Phone Notes</b></sub>
+</td>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/notes-and-bookmarks.jpg" width="220"><br>
+<sub>Notes and Bookmarks — every saved book</sub>
+</td>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/clippings-list.jpg" width="220"><br>
+<sub>Clippings list with tags and note previews</sub>
+</td>
+</tr>
+<tr>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/tag-picker.jpg" width="220"><br>
+<sub>Tag picker after saving a highlight</sub>
+</td>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/write-note-keyboard.jpg" width="220"><br>
+<sub>Writing a note with the built-in keyboard</sub>
+</td>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/clipping-detail-note.jpg" width="220"><br>
+<sub>Highlight detail with its note attached</sub>
+</td>
+</tr>
+</table>
+
 ## Building & installing
 
 Prebuilt `.bin` files are on the [Releases page](https://github.com/HilbergK/CrossNotes/releases) — see the [installation guide](./docs/installation.md) for the web-based flash tool.
