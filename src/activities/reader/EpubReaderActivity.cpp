@@ -2934,25 +2934,27 @@ void EpubReaderActivity::startClipSelection() {
               const uint16_t tagSpine = newClipping.spineIndex;
               const uint16_t tagPage = newClipping.startPage;
               const uint16_t tagWord = newClipping.startWordIndex;
+              const uint32_t tagClipTimestamp = newClipping.timestamp;
 
-              startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput),
-                                     [this, tagSpine, tagPage, tagWord](const ActivityResult& tagRes) {
-                                       if (!tagRes.isCancelled) {
-                                         const auto& tagResult = std::get<TagResult>(tagRes.data);
-                                         if (tagResult.tag != 0) {
-                                           NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord,
-                                                         tagResult.tag);
-                                         }
-                                         if (!tagResult.noteText.empty()) {
-                                           NOTES.saveNote(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord,
-                                                          tagResult.noteText.c_str());
-                                         }
-                                       }
-                                       drawToast(renderer, tr(STR_CLIPPING_SAVED));
-                                       delay(1000);
-                                       resumeReadingPaceTimer("clip_selection_return");
-                                       requestUpdate();
-                                     });
+              startActivityForResult(
+                  std::make_unique<TagPickerActivity>(renderer, mappedInput),
+                  [this, tagSpine, tagPage, tagWord, tagClipTimestamp](const ActivityResult& tagRes) {
+                    if (!tagRes.isCancelled) {
+                      const auto& tagResult = std::get<TagResult>(tagRes.data);
+                      if (tagResult.tag != 0) {
+                        NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
+                                      tagResult.tag);
+                      }
+                      if (!tagResult.noteText.empty()) {
+                        NOTES.saveNote(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
+                                       tagResult.noteText.c_str());
+                      }
+                    }
+                    drawToast(renderer, tr(STR_CLIPPING_SAVED));
+                    delay(1000);
+                    resumeReadingPaceTimer("clip_selection_return");
+                    requestUpdate();
+                  });
               return;  // Toast and timer resume are handled inside the tag picker's result handler
             }
 

@@ -135,8 +135,7 @@ void SavedItemsHomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 tr(STR_BOOKMARKS_AND_CLIPPINGS));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Notes and Bookmarks");
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
@@ -176,8 +175,8 @@ void SavedItemsHomeActivity::showSavedKindMenu(const int bookIndex) {
 
   std::vector<FileBrowserActionActivity::MenuItem> items;
   items.reserve(2);
+  items.push_back({FileBrowserAction::ViewClippings, StrId::STR_NOTES});
   items.push_back({FileBrowserAction::ViewBookmarks, StrId::STR_BOOKMARKS});
-  items.push_back({FileBrowserAction::ViewClippings, StrId::STR_CLIPPINGS});
 
   startActivityForResult(
       std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, entry.bookTitle, std::move(items)),

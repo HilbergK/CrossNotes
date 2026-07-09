@@ -64,14 +64,48 @@ async function loadScreenshots() {
       const card = document.createElement('div');
       card.className = 'screenshot-card';
       const downloadUrl = '/download?path=' + encodeURIComponent(img.path);
-      card.innerHTML = `
-        <img src="${downloadUrl}" loading="lazy" alt="Screenshot">
-        <a href="${downloadUrl}" download="${img.name}">Download</a>
-      `;
+
+      const imgEl = document.createElement('img');
+      imgEl.src = downloadUrl;
+      imgEl.loading = 'lazy';
+      imgEl.alt = 'Screenshot';
+      card.appendChild(imgEl);
+
+      const actions = document.createElement('div');
+      actions.className = 'screenshot-actions';
+
+      const downloadLink = document.createElement('a');
+      downloadLink.href = downloadUrl;
+      downloadLink.download = img.name;
+      downloadLink.textContent = 'Download';
+      actions.appendChild(downloadLink);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-delete-screenshot';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => deleteScreenshot(img.path, card));
+      actions.appendChild(deleteBtn);
+
+      card.appendChild(actions);
       container.appendChild(card);
     });
   } catch (e) {
     container.innerHTML = '<p class="empty-hint" style="color:var(--danger-color);">Could not load screenshots.</p>';
+  }
+}
+
+// No confirmation by design — screenshots are low-stakes and easy to retake.
+async function deleteScreenshot(path, cardEl) {
+  try {
+    const res = await fetch('/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'path=' + encodeURIComponent(path)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    cardEl.remove();
+  } catch (e) {
+    showMessage('Failed to delete screenshot: ' + e.message, 'error');
   }
 }
 
@@ -135,9 +169,11 @@ async function selectBook(path) {
 
   const main = document.getElementById('highlights-main');
   const emptyState = document.getElementById('highlights-empty-state');
+  const toolbar = document.getElementById('highlights-toolbar');
   const highlightsContainer = document.getElementById('highlights-container');
 
   emptyState.style.display = 'none';
+  toolbar.style.display = 'flex';
   highlightsContainer.style.display = 'block';
   highlightsContainer.innerHTML = '<div class="loader-container"><span class="loader"></span></div>';
 
@@ -151,6 +187,48 @@ async function selectBook(path) {
     highlightsContainer.innerHTML = '<p class="empty-hint" style="color:var(--danger-color);">Could not load highlights for this book.</p>';
     console.error(e);
   }
+}
+
+// ── Export notes ─────────────────────────────────────────────────────────────
+function currentBookTitle() {
+  const book = books.find(b => b.path === currentBookPath);
+  const name = book ? book.name : (currentBookPath.split('/').pop() || 'book');
+  return name.replace(/\.epub$/i, '');
+}
+
+function exportNotes() {
+  if (!currentHighlights || currentHighlights.length === 0) {
+    showMessage('No highlights to export.', 'error');
+    return;
+  }
+
+  const title = currentBookTitle();
+  const lines = [`# ${title}`, ''];
+
+  currentHighlights.forEach(h => {
+    const chapter = h.chapterTitle || 'Unknown Chapter';
+    const tag = (h.note && h.note.tag) ? ` (${h.note.tag})` : '';
+    lines.push(`## ${chapter}${tag}`);
+    lines.push('');
+    lines.push(`> ${h.text}`);
+    if (h.note && h.note.text) {
+      lines.push('');
+      lines.push(`**Note:** ${h.note.text}`);
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (title.replace(/[^\w\- ]/g, '').trim() || 'book') + ' - notes.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // Same symbol set and order as the on-device tag picker.
@@ -204,6 +282,7 @@ function renderHighlights(highlights) {
       >${escapeHtml(noteText)}</textarea>
       <div class="note-actions">
         <span class="save-status" id="status_${idx}">Saved</span>
+        <button class="btn-delete-note" onclick="deleteNoteConfirm(${idx})">Delete</button>
         <button class="btn-clear-note" onclick="clearNote(${idx})">Clear</button>
         <button class="btn-save-note" onclick="saveNote(${idx})">Save Note</button>
       </div>
@@ -232,6 +311,7 @@ async function saveNote(idx) {
         spineIndex: h.spineIndex,
         startPage: h.startPage,
         startWordIndex: h.startWordIndex,
+        timestamp: h.timestamp,
         text: textarea.value.trim(),
         tag: tagValue
       })
@@ -264,6 +344,17 @@ async function clearNote(idx) {
   const h = currentHighlights[idx];
   const textarea = document.getElementById(noteId(h));
   textarea.value = '';
+  await saveNote(idx);
+}
+
+// Clears both text and tag, which the server treats as a full delete.
+async function deleteNoteConfirm(idx) {
+  if (!confirm('Delete this note and its tag?')) return;
+  const h = currentHighlights[idx];
+  const textarea = document.getElementById(noteId(h));
+  const tagSelect = document.getElementById('tag_' + idx);
+  textarea.value = '';
+  if (tagSelect) tagSelect.value = '';
   await saveNote(idx);
 }
 

@@ -12,6 +12,7 @@
 #include "activities/home/BookActions.h"
 #include "activities/home/FileBrowserActionActivity.h"
 #include "activities/reader/TagPickerActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -30,8 +31,10 @@ constexpr unsigned long CLIPPING_DELETE_HOLD_MS = 1000;
 // but a very long note (e.g. written on the phone, up to kNoteTextMax)
 // can take long enough to trip the watchdog. Block on-device editing above
 // this length rather than risk a reboot; such notes are still fully
-// editable from Phone Notes.
-constexpr size_t EDIT_NOTE_MAX_LENGTH = 600;
+// editable from Phone Notes. Kept low (not just under whatever threshold
+// happened not to crash) since typing on-device is slow anyway — long
+// notes belong on the phone regardless of the crash risk.
+constexpr size_t EDIT_NOTE_MAX_LENGTH = 250;
 
 bool isUtf8SpaceAt(const std::string& text, const size_t index, size_t& advance) {
   const auto c = static_cast<unsigned char>(text[index]);
@@ -241,10 +244,12 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
   buildWrappedDetailLines(renderer, UI_10_FONT_ID, detailText, textWidth, detailLines);
   if (detailLines.empty()) detailLines.push_back("");
 
-  // Append the note (if any) directly below the quote so it reads as one flow.
+  // Append the note (if any) directly below the quote, as part of the same
+  // scrollable/paginated flow, so long notes remain fully readable.
   if (selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
     const Clipping& clipping = clippings[selectedIndex];
-    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    const Note* note =
+        NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
     if (note != nullptr && (note->tag != 0 || !note->text.empty())) {
       detailLines.push_back("");
       std::string label = "Note";
@@ -272,6 +277,13 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
 
 void EpubReaderClippingListActivity::deleteSelectedClipping() {
   if (clippings.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(clippings.size())) return;
+
+  // Remove the clipping's note/tag along with it — otherwise the note record
+  // would sit orphaned in the notes file forever.
+  if (!bookPath.empty()) {
+    const Clipping& doomed = clippings[selectedIndex];
+    NOTES.deleteNote(bookPath.c_str(), doomed.spineIndex, doomed.startPage, doomed.startWordIndex, doomed.timestamp);
+  }
 
   if (!CLIPPINGS.removeClippingAt(static_cast<size_t>(selectedIndex))) return;
 
@@ -335,23 +347,40 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           return;
         }
 
-        const auto it = std::find_if(clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
-          return clipping.spineIndex == selectedClipping.spineIndex &&
-                 clipping.startPage == selectedClipping.startPage &&
-                 clipping.startWordIndex == selectedClipping.startWordIndex &&
-                 clipping.timestamp == selectedClipping.timestamp;
-        });
-        if (it != clippings.end()) {
-          selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
-          deleteSelectedClipping();
-        } else {
-          requestUpdate();
+        std::string body;
+        buildOneLineSnippetText(selectedClipping.text, body);
+        if (body.size() > 60) {
+          body = body.substr(0, 60) + "...";
         }
+
+        startActivityForResult(std::make_unique<ConfirmationActivity>(
+                                   renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE), body),
+                               [this, selectedClipping](const ActivityResult& confirmResult) {
+                                 if (confirmResult.isCancelled) {
+                                   requestUpdate();
+                                   return;
+                                 }
+
+                                 const auto it = std::find_if(
+                                     clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
+                                       return clipping.spineIndex == selectedClipping.spineIndex &&
+                                              clipping.startPage == selectedClipping.startPage &&
+                                              clipping.startWordIndex == selectedClipping.startWordIndex &&
+                                              clipping.timestamp == selectedClipping.timestamp;
+                                     });
+                                 if (it != clippings.end()) {
+                                   selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
+                                   deleteSelectedClipping();
+                                 } else {
+                                   requestUpdate();
+                                 }
+                               });
       });
 }
 
 void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping) {
-  const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+  const Note* existing =
+      NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
   const char currentTag = existing != nullptr ? existing->tag : 0;
 
   startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput, currentTag),
@@ -360,11 +389,11 @@ void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping
                              const auto& tagResult = std::get<TagResult>(result.data);
                              if (!tagResult.noteText.empty()) {
                                NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
-                                              clipping.startWordIndex, tagResult.noteText.c_str());
+                                              clipping.startWordIndex, clipping.timestamp, tagResult.noteText.c_str());
                              } else {
                                // tag == 0 clears the tag while preserving any existing note text.
                                NOTES.saveTag(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
-                                             clipping.startWordIndex, tagResult.tag);
+                                             clipping.startWordIndex, clipping.timestamp, tagResult.tag);
                              }
                              detailLayoutWidth = 0;  // tag changed — force detail re-layout
                            }
@@ -373,7 +402,8 @@ void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping
 }
 
 void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clipping) {
-  const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+  const Note* existing =
+      NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
   const std::string initialText = existing != nullptr ? existing->text : std::string{};
 
   if (initialText.length() > EDIT_NOTE_MAX_LENGTH) {
@@ -383,29 +413,30 @@ void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clippin
     return;
   }
 
-  startActivityForResult(
-      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_EDIT_NOTE), initialText,
-                                              NoteStore::kNoteTextMax),
-      [this, clipping](const ActivityResult& result) {
-        if (!result.isCancelled) {
-          const auto& kb = std::get<KeyboardResult>(result.data);
-          const Note* existing =
-              NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
-          if (!kb.text.empty()) {
-            NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex,
-                           kb.text.c_str());
-          } else if (existing != nullptr) {
-            if (existing->tag != 0) {
-              // Cleared the text but a tag exists — keep the tag, drop the text.
-              NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex, "");
-            } else {
-              NOTES.deleteNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
-            }
-          }
-          detailLayoutWidth = 0;  // note changed — force detail re-layout
-        }
-        requestUpdate();
-      });
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_EDIT_NOTE), initialText,
+                                                                 NoteStore::kNoteTextMax),
+                         [this, clipping](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto& kb = std::get<KeyboardResult>(result.data);
+                             const Note* existing = NOTES.getNoteForClipping(
+                                 clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
+                             if (!kb.text.empty()) {
+                               NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
+                                              clipping.startWordIndex, clipping.timestamp, kb.text.c_str());
+                             } else if (existing != nullptr) {
+                               if (existing->tag != 0) {
+                                 // Cleared the text but a tag exists — keep the tag, drop the text.
+                                 NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
+                                                clipping.startWordIndex, clipping.timestamp, "");
+                               } else {
+                                 NOTES.deleteNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
+                                                  clipping.startWordIndex, clipping.timestamp);
+                               }
+                             }
+                             detailLayoutWidth = 0;  // note changed — force detail re-layout
+                           }
+                           requestUpdate();
+                         });
 }
 
 void EpubReaderClippingListActivity::loop() {
@@ -608,7 +639,8 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
     const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
     renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 24, chapterTrunc.c_str(), !isSelected);
 
-    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    const Note* note =
+        NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
     if (note != nullptr) {
       std::string noteSnippet;
       if (note->tag != 0) {

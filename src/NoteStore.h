@@ -12,9 +12,16 @@ struct Note {
   uint16_t spineIndex = 0;
   uint16_t startPage = 0;
   uint16_t startWordIndex = 0;
+  // The clipping's own creation timestamp. (spineIndex, startPage,
+  // startWordIndex) alone is not a reliable identity for a clipping —
+  // ClippingStore itself disambiguates clippings the same way for exactly
+  // this reason (see its own delete-match logic). 0 means "not set" (a note
+  // saved before this field existed); such notes are matched by the legacy
+  // 3-field key and migrated forward on next save. See findNoteIndex().
+  uint32_t clippingTimestamp = 0;
   std::string text;
-  char tag = 0;  // NEW: single-char tag: '!' '?' '>' '<' '*' '~'  or 0 for none
-  uint32_t timestamp = 0;
+  char tag = 0;            // single-char tag: '!' '?' '>' '<' '*' '~' etc., or 0 for none
+  uint32_t timestamp = 0;  // this note's own last-modified time
 };
 
 class NoteStore {
@@ -34,21 +41,27 @@ class NoteStore {
 
   const std::vector<Note>& getNotes() const { return notes; }
 
-  // Returns nullptr if no note exists for this clipping.
-  const Note* getNoteForClipping(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex) const;
+  // Returns nullptr if no note exists for this clipping. clippingTimestamp
+  // should be the clipping's own creation timestamp (Clipping::timestamp) —
+  // required to disambiguate clippings that otherwise share the same
+  // spine/page/word key.
+  const Note* getNoteForClipping(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                                 uint32_t clippingTimestamp) const;
 
   // Save or update the text of a note for a clipping.
   // Preserves existing tag if the note already exists.
   bool saveNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
-                const char* text);
+                uint32_t clippingTimestamp, const char* text);
 
   // Save or update the tag of a note for a clipping.
   // Preserves existing text if the note already exists.
   // Pass tag = 0 to remove the tag while keeping the text.
-  bool saveTag(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex, char tag);
+  bool saveTag(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+               uint32_t clippingTimestamp, char tag);
 
   // Delete a note entirely.
-  bool deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex);
+  bool deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                  uint32_t clippingTimestamp);
 
   // Migrate notes when a file is moved/renamed.
   void migrateForFilePath(const std::string& oldPath, const std::string& newPath);
@@ -60,8 +73,12 @@ class NoteStore {
   bool loadFromFile(const std::string& path);
   bool saveToFile(const std::string& path) const;
 
-  // Internal: find note index by clipping coords, or -1 if not found.
-  int findNoteIndex(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex) const;
+  // Internal: find note index by clipping identity, or -1 if not found.
+  // Tries the exact (spine, page, word, clippingTimestamp) match first; if
+  // clippingTimestamp is nonzero and that fails, falls back to matching a
+  // legacy note (clippingTimestamp == 0) on the old 3-field key so notes
+  // saved before this field existed aren't orphaned.
+  int findNoteIndex(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex, uint32_t clippingTimestamp) const;
 
   bool loaded = false;
   std::string bookFilePath;

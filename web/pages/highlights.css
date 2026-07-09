@@ -42,13 +42,6 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-.screenshot-card a {
-  display: block;
-  padding: 10px;
-  text-decoration: none;
-  color: var(--text-color);
-  font-weight: bold;
-}
 
 /* ── Note tag badge (Session 6) ── */
 .note-tag {
@@ -146,6 +139,29 @@
   text-align: center;
   padding: 40px 0;
   font-size: 0.95em;
+}
+
+#highlights-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.btn-export-notes {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 0.88em;
+  font-weight: 500;
+  color: var(--label-color);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-export-notes:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 /* ── Highlight card ── */
@@ -277,6 +293,51 @@
 .btn-clear-note:hover {
   border-color: var(--danger-color);
   color: var(--danger-color);
+}
+
+.btn-delete-note {
+  background-color: transparent;
+  border: 1px solid var(--danger-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--danger-color);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  margin-right: auto;
+}
+
+.btn-delete-note:hover {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.screenshot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.screenshot-actions a {
+  text-decoration: none;
+  color: var(--text-color);
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.btn-delete-screenshot {
+  background: transparent;
+  border: none;
+  color: var(--danger-color);
+  font-size: 0.85em;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.btn-delete-screenshot:hover {
+  text-decoration: underline;
 }
 
 .save-status {

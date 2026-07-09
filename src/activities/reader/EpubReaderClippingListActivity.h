@@ -25,6 +25,8 @@ class EpubReaderClippingListActivity final : public Activity {
   std::vector<Clipping> clippings;
   std::string bookPath;
   std::string detailText;
+  // Wrapped quote lines, with the note (if any) appended directly after —
+  // one continuous paginated flow.
   std::vector<std::string> detailLines;
   ButtonNavigator buttonNavigator;
   int selectedIndex = 0;

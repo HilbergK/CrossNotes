@@ -2013,7 +2013,8 @@ void CrossPointWebServer::handleGetHighlights() const {
 
   for (size_t i = 0; i < clippings.size(); ++i) {
     const auto& clipping = clippings[i];
-    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    const Note* note =
+        NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
 
     doc.clear();
     doc["spineIndex"] = clipping.spineIndex;
@@ -2071,6 +2072,11 @@ void CrossPointWebServer::handlePostNote() {
   const uint16_t spineIndex = doc["spineIndex"] | 0;
   const uint16_t startPage = doc["startPage"] | 0;
   const uint16_t startWordIndex = doc["startWordIndex"] | 0;
+  // The clipping's own creation timestamp, echoed back by the phone UI from
+  // the /api/highlights response — required to disambiguate clippings that
+  // otherwise share the same spine/page/word key. 0 for older clients that
+  // don't send it, which falls back to the legacy match in NoteStore.
+  const uint32_t clippingTimestamp = doc["timestamp"] | uint32_t(0);
   const std::string text = doc["text"] | std::string("");
   // "tag" is optional — only present when the phone UI's tag picker was used,
   // so a text-only save doesn't clobber an existing tag.
@@ -2086,13 +2092,14 @@ void CrossPointWebServer::handlePostNote() {
 
   const bool tagWillBeEmpty = !hasTag || tagStr.empty();
   if (text.empty() && tagWillBeEmpty) {
-    NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex);
+    NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
   } else {
     // Always write text (even "") so an intentionally-cleared note body is
     // actually blanked rather than left stale; saveNote preserves the tag.
-    NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, text.c_str());
+    NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str());
     if (hasTag) {
-      NOTES.saveTag(path.c_str(), spineIndex, startPage, startWordIndex, tagStr.empty() ? 0 : tagStr[0]);
+      NOTES.saveTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp,
+                    tagStr.empty() ? 0 : tagStr[0]);
     }
   }
 

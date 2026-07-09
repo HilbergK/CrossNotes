@@ -201,10 +201,10 @@ bool ensureReusableCoverPath(RecentBook& book) {
   return true;
 }
 
-const char* savedItemsLabel(bool hasBookmarks, bool hasClippings) {
-  if (hasBookmarks && hasClippings) return tr(STR_BOOKMARKS_AND_CLIPPINGS);
-  if (hasClippings) return tr(STR_CLIPPINGS);
-  return tr(STR_BOOKMARKS);
+const char* savedItemsLabel(bool /*hasBookmarks*/, bool /*hasClippings*/) {
+  // Single fixed label — this entry always opens the same screen covering
+  // bookmarks, clippings, tags, and notes together.
+  return "Notes and Bookmarks";
 }
 
 void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks,
@@ -212,14 +212,17 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   items.push({tr(STR_BROWSE_FILES), Folder, HomeMenuAction::BrowseFiles});
   items.push({tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks});
 
+  // Notes/Bookmarks surfaced early — it's now a primary entry point, not a
+  // secondary saved-items list.
+  if (hasBookmarks || hasClippings) {
+    items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
+  }
+
   if (hasOpdsServers) {
     items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
   }
   if (hasReadingStats) {
     items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});
-  }
-  if (hasBookmarks || hasClippings) {
-    items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
@@ -237,11 +240,11 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
   HomeMenuEntries items;
   items.push({tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks});
 
-  if (hasOpdsServers) {
-    items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
-  }
   if (hasBookmarks || hasClippings) {
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
+  }
+  if (hasOpdsServers) {
+    items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
   }
   if (hasReadingStats) {
     items.push({tr(STR_READING_STATS), Chart, HomeMenuAction::ReadingStats});

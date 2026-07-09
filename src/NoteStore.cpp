@@ -63,6 +63,8 @@ bool NoteStore::loadFromFile(const std::string& path) {
     note.spineIndex = obj["spineIndex"] | uint16_t(0);
     note.startPage = obj["startPage"] | uint16_t(0);
     note.startWordIndex = obj["startWordIndex"] | uint16_t(0);
+    // Missing (pre-migration files) defaults to 0 — the legacy sentinel.
+    note.clippingTimestamp = obj["clippingTimestamp"] | uint32_t(0);
     note.text = obj["text"] | std::string{};
     note.timestamp = obj["timestamp"] | uint32_t(0);
     // tag stored as a 1-character string; 0 / missing = no tag
@@ -96,6 +98,9 @@ bool NoteStore::saveToFile(const std::string& path) const {
     obj["spineIndex"] = note.spineIndex;
     obj["startPage"] = note.startPage;
     obj["startWordIndex"] = note.startWordIndex;
+    if (note.clippingTimestamp != 0) {
+      obj["clippingTimestamp"] = note.clippingTimestamp;
+    }
     obj["text"] = note.text;
     obj["timestamp"] = note.timestamp;
     // tag: store as 1-char string, or omit if no tag
@@ -121,35 +126,57 @@ bool NoteStore::saveToFile(const std::string& path) const {
 
 // ─── Lookup ───────────────────────────────────────────────────────────────────
 
-int NoteStore::findNoteIndex(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex) const {
+int NoteStore::findNoteIndex(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                             uint32_t clippingTimestamp) const {
+  // Exact match, including the clipping's own timestamp — the reliable path.
+  // (spineIndex, startPage, startWordIndex) alone can collide between two
+  // distinct clippings (ClippingStore's own equality checks add timestamp
+  // for the same reason), which previously caused a note/tag written for
+  // one highlight to silently show up on a different, unrelated one.
   for (int i = 0; i < static_cast<int>(notes.size()); i++) {
     const Note& n = notes[i];
-    if (n.spineIndex == spineIndex && n.startPage == startPage && n.startWordIndex == startWordIndex) {
+    if (n.spineIndex == spineIndex && n.startPage == startPage && n.startWordIndex == startWordIndex &&
+        n.clippingTimestamp == clippingTimestamp) {
       return i;
+    }
+  }
+  // Legacy fallback: notes saved before clippingTimestamp existed have it
+  // set to 0. Match those on the old 3-field key so they aren't orphaned by
+  // this change. Callers migrate the record forward by writing the real
+  // clippingTimestamp on next save (see saveNote/saveTag below).
+  if (clippingTimestamp != 0) {
+    for (int i = 0; i < static_cast<int>(notes.size()); i++) {
+      const Note& n = notes[i];
+      if (n.spineIndex == spineIndex && n.startPage == startPage && n.startWordIndex == startWordIndex &&
+          n.clippingTimestamp == 0) {
+        return i;
+      }
     }
   }
   return -1;
 }
 
-const Note* NoteStore::getNoteForClipping(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex) const {
-  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex);
+const Note* NoteStore::getNoteForClipping(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                                          uint32_t clippingTimestamp) const {
+  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
   return idx >= 0 ? &notes[idx] : nullptr;
 }
 
 // ─── Save / Delete ────────────────────────────────────────────────────────────
 
 bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
-                         const char* text) {
+                         uint32_t clippingTimestamp, const char* text) {
   // Auto-load if needed (e.g. called from EpubReaderActivity while NOTES not loaded)
   if (!loaded || bookFilePath != filePath) {
     loadForBook(filePath, "epub");
   }
 
   const std::string path = notesFilePath(filePath);
-  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex);
+  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
 
   if (idx >= 0) {
-    // Update existing — preserve tag
+    // Update existing — preserve tag. Also migrates a legacy (0) key forward.
+    notes[idx].clippingTimestamp = clippingTimestamp;
     notes[idx].text = std::string(text).substr(0, NOTE_TEXT_MAX);
     notes[idx].timestamp = millis();
   } else {
@@ -158,6 +185,7 @@ bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t sta
     note.spineIndex = spineIndex;
     note.startPage = startPage;
     note.startWordIndex = startWordIndex;
+    note.clippingTimestamp = clippingTimestamp;
     note.text = std::string(text).substr(0, NOTE_TEXT_MAX);
     note.timestamp = millis();
     note.tag = 0;
@@ -168,17 +196,18 @@ bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t sta
 }
 
 bool NoteStore::saveTag(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
-                        char tag) {
+                        uint32_t clippingTimestamp, char tag) {
   // Auto-load if needed
   if (!loaded || bookFilePath != filePath) {
     loadForBook(filePath, "epub");
   }
 
   const std::string path = notesFilePath(filePath);
-  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex);
+  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
 
   if (idx >= 0) {
-    // Update existing — preserve text
+    // Update existing — preserve text. Also migrates a legacy (0) key forward.
+    notes[idx].clippingTimestamp = clippingTimestamp;
     notes[idx].tag = tag;
     notes[idx].timestamp = millis();
   } else {
@@ -187,6 +216,7 @@ bool NoteStore::saveTag(const char* filePath, uint16_t spineIndex, uint16_t star
     note.spineIndex = spineIndex;
     note.startPage = startPage;
     note.startWordIndex = startWordIndex;
+    note.clippingTimestamp = clippingTimestamp;
     note.text = "";
     note.timestamp = millis();
     note.tag = tag;
@@ -196,13 +226,14 @@ bool NoteStore::saveTag(const char* filePath, uint16_t spineIndex, uint16_t star
   return saveToFile(path);
 }
 
-bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex) {
+bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                           uint32_t clippingTimestamp) {
   if (!loaded || bookFilePath != filePath) {
     loadForBook(filePath, "epub");
   }
 
   const std::string path = notesFilePath(filePath);
-  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex);
+  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
   if (idx < 0) return true;  // Already gone
 
   notes.erase(notes.begin() + idx);
