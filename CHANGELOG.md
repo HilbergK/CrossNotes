@@ -1,18 +1,26 @@
 # Changelog
 
-## [Unreleased] — CrossNotes
+## [v1.0.0] - 2026-07-08 — CrossNotes
 
 ### Added
-- **On-device tag picker**: after saving a highlight, a quick picker lets you tag it with a single symbol — `!` important, `?` question, `>` key argument, `<` counterpoint, `*` cite, `~` verify, or skip.
+- **On-device tag picker**: after saving a highlight, a picker lets you tag it with a symbol — `!` `?` `*` `~` `+` `=` `#` `<` `>` — or write a note directly using the built-in keyboard.
 - **Notes on highlights**: every saved clipping can carry a written note. Notes are stored on the SD card under `/.crosspoint/notes/` and shown beneath each clipping in the on-device clipping list and detail views.
-- **Phone notes UI**: a new `/highlights` page in the device web portal lists every book with highlights and lets you read each highlight and add/edit a full written note from your phone (`GET /api/highlights`, `POST /api/notes`).
-- **Screenshot browser**: a Screenshots tab in the phone web UI shows a gallery of device screenshots (including per-book reader screenshots) with one-tap download.
-- **My Notes** home screen: lists every book that has highlights and opens its clipping/notes list directly, without opening the book first.
-- **Quick Notes** home shortcut: starts a hotspot and shows a QR code that opens directly on the phone Notes page.
-- **Screenshots** home shortcut: QR code that opens the phone web UI directly on the Screenshots tab.
+- **Edit Tag / Edit Note / Delete** on any clipping from its action menu; deleting a clipping removes its note/tag too, and asks for confirmation first.
+- **Phone notes UI**: a `/highlights` page in the device web portal lists every book with highlights, lets you read each highlight, set its tag from a dropdown, and add/edit a full written note from your phone.
+- **Export Notes**: download a book's highlights, tags, and notes as a Markdown file from the phone UI.
+- **Screenshot browser**: a Screenshots tab in the phone web UI shows a gallery of device screenshots with one-tap download or delete.
+- **Notes and Bookmarks** home entry: browse every book with highlights or bookmarks without opening the book first.
+- **Phone Notes** home shortcut: starts a hotspot and shows a QR code that opens directly on the phone notes page.
 
 ### Fixed
 - Tag picker suppresses the Back release on cancel so it does not leak an input to the reader underneath.
+- Notes/tags could bleed between two distinct highlights that happened to share the same chapter/page/word coordinates; note lookups are now disambiguated by the highlight's own creation time.
+- Web settings page could crash the device in hotspot mode under heap pressure.
+- Long highlights were silently truncated at 512 characters; raised to 1024.
+- List screens (clippings, highlights) could lag noticeably with long text due to an O(n²) text-truncation routine; fixed.
+
+### Known issues
+- Editing an existing note on-device can briefly show a visual ghosting artifact in the detail view (a remnant of the on-device keyboard screen). It clears as soon as you leave and reopen the note. This is a display refresh quirk only — the stored note text is never affected.
 
 ---
 

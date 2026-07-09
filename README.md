@@ -1,43 +1,41 @@
 # CrossNotes
 
-> ⚠️ **Not yet tested.** This firmware has not yet been properly tested on a physical device. It compiles cleanly, but hardware testing is still pending. A release will be published once confirmed. Flash at your own risk — you can always revert via the CrossPoint web installer.
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
 
----
-
-CrossNotes is a fork of [CrossInk](https://github.com/uxjulia/CrossInk) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
-
-Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. The notes are then stored and visible within the device.
+Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. The notes are stored on the device and shown right alongside the highlight.
 
 ## What it adds
 
 **On the device**
-- Tag picker after every highlight — `!` `?` `>` `<` `*` `~` or skip
+- Tag picker after every highlight — `!` `?` `*` `~` `+` `=` `#` `<` `>` or no tag, plus a "Write a note…" option using the built-in keyboard
 - Tags and note previews shown in the clipping list and detail view
-- **My Notes** home screen — lists books with highlights, jumps to clippings
-- **Quick Notes** home shortcut — starts hotspot, shows QR → opens notes on phone
-- **Screenshots** home shortcut — same, but opens the screenshot gallery
+- **Notes and Bookmarks** home entry — browse every book with highlights or bookmarks; Notes and Bookmarks are separate lists per book
+- **Phone Notes** home shortcut — starts the hotspot and shows a QR code straight to the notes page on your phone
+- Edit Tag / Edit Note / Delete available from the clipping menu (delete asks for confirmation)
 
 **On your phone (just the browser)**
-- `/highlights` page: read each highlight and type a full note next to it
-- Tags shown alongside each highlight
-- Screenshots tab with gallery and one-tap download
+- `/highlights` page: read each highlight, set its tag from a dropdown, and type a full note next to it
+- **Export Notes** — download all of a book's highlights, tags, and notes as a Markdown file
+- **Screenshots** tab: gallery of device screenshots with one-tap download or delete
 
 ## How it works
 
 1. Highlight a passage in the reader
-2. Tag it (or skip) — reading resumes immediately
-3. Home → **Quick Notes** → scan the QR code with your phone
-4. Type your notes; they save to the device
+2. Tag it (or skip, or write a note directly) — reading resumes immediately
+3. Home → **Phone Notes** → scan the QR code with your phone
+4. Read your highlights and type notes; they save straight to the device
 
-## Building
+## Building & installing
+
+Prebuilt `.bin` files are on the [Releases page](https://github.com/HilbergK/CrossNotes/releases) — see the [installation guide](./docs/installation.md) for the web-based flash tool.
+
+To build from source:
 
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
 pio run -e tiny    # or teensy / xlarge
 ```
-
-Prebuilt `.bin` files will be on the [Releases page](https://github.com/HilbergK/CrossNotes/releases) once hardware-tested. Flash via the [CrossPoint web installer](./docs/installation.md).
 
 ## Credits
 
