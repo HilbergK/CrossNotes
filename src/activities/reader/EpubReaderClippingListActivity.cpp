@@ -617,8 +617,34 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   const int total = static_cast<int>(clippings.size());
   const int pageStartIndex = (selectedIndex / pageItems) * pageItems;
   const int marginLeft = contentX + 20;
+  // Keep row text clear of the scroll-indicator arrows on the right edge.
+  const int rowTextWidth = contentWidth - 40 - (total > pageItems ? 22 : 0);
   std::string snippetText;
   snippetText.reserve(CLIPPING_TEXT_MAX);
+
+  // Scroll indicator (up/down arrows on the right edge) when the list spans
+  // more than one page — mirrors the built-in GUI.drawList indicator used by
+  // the chapter picker and menus. Drawn before the rows so a selected row's
+  // highlight layers over it, exactly as drawList does.
+  if (total > pageItems) {
+    constexpr int indicatorWidth = 20;
+    constexpr int arrowSize = 6;
+    constexpr int rightMargin = 15;
+    const int centerX = contentX + contentWidth - indicatorWidth / 2 - rightMargin;
+    const int indicatorTop = LIST_START_Y + contentY;
+    const int indicatorBottom = indicatorTop + pageItems * ROW_HEIGHT - arrowSize;
+    for (int i = 0; i < arrowSize; ++i) {
+      const int lineWidth = 1 + i * 2;
+      const int startX = centerX - i;
+      renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
+    }
+    for (int i = 0; i < arrowSize; ++i) {
+      const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+      const int startX = centerX - (arrowSize - 1 - i);
+      renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
+                        indicatorBottom - arrowSize + 1 + i);
+    }
+  }
 
   for (int i = 0; i < pageItems; i++) {
     const int itemIndex = pageStartIndex + i;
@@ -632,11 +658,11 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
 
     const Clipping& clipping = clippings[itemIndex];
     buildOneLineSnippetText(clipping.text, snippetText);
-    const std::string snippetTrunc = renderer.truncatedText(UI_10_FONT_ID, snippetText.c_str(), contentWidth - 40);
+    const std::string snippetTrunc = renderer.truncatedText(UI_10_FONT_ID, snippetText.c_str(), rowTextWidth);
     renderer.drawText(UI_10_FONT_ID, marginLeft, rowY + 5, snippetTrunc.c_str(), !isSelected);
 
     const char* chapter = clipping.chapterTitle[0] != '\0' ? clipping.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
-    const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
+    const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, rowTextWidth);
     renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 24, chapterTrunc.c_str(), !isSelected);
 
     const Note* note =
@@ -651,7 +677,7 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
       std::string textSnippet;
       buildOneLineSnippetText(note->text, textSnippet);
       noteSnippet += textSnippet;
-      const std::string noteTrunc = renderer.truncatedText(SMALL_FONT_ID, noteSnippet.c_str(), contentWidth - 40);
+      const std::string noteTrunc = renderer.truncatedText(SMALL_FONT_ID, noteSnippet.c_str(), rowTextWidth);
       renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 46, noteTrunc.c_str(), !isSelected);
     }
   }
