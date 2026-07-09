@@ -153,6 +153,17 @@ async function selectBook(path) {
   }
 }
 
+// Same symbol set and order as the on-device tag picker.
+const TAG_OPTIONS = ['', '!', '?', '*', '~', '+', '=', '#', '<', '>'];
+
+function tagOptionsHtml(selectedTag) {
+  return TAG_OPTIONS.map(t => {
+    const label = t === '' ? 'No tag' : t;
+    const selected = (selectedTag || '') === t ? ' selected' : '';
+    return `<option value="${t}"${selected}>${escapeHtml(label)}</option>`;
+  }).join('');
+}
+
 // ── Render highlights ────────────────────────────────────────────────────────
 function renderHighlights(highlights) {
   const container = document.getElementById('highlights-container');
@@ -170,14 +181,19 @@ function renderHighlights(highlights) {
 
     const chapter = h.chapterTitle || 'Unknown Chapter';
     const noteText = (h.note && h.note.text) ? h.note.text : '';
-    // Session 6: on-device tag (!, ?, >, <, *, ~) shown as a badge before the chapter.
-    const tagBadge = (h.note && h.note.tag)
-      ? `<span class="note-tag">${escapeHtml(h.note.tag)}</span>`
-      : '';
+    const currentTag = (h.note && h.note.tag) ? h.note.tag : '';
+    // Session 6: on-device tag (!, ?, >, <, *, ~, +, =, #) shown as a badge before the chapter.
+    const tagBadge = currentTag ? `<span class="note-tag">${escapeHtml(currentTag)}</span>` : '';
 
     card.innerHTML = `
-      <div class="highlight-meta">${tagBadge}${escapeHtml(chapter)}</div>
+      <div class="highlight-meta" id="meta_${idx}"><span id="tagbadge_${idx}">${tagBadge}</span>${escapeHtml(chapter)}</div>
       <blockquote class="highlight-text">${escapeHtml(h.text)}</blockquote>
+      <div class="tag-row">
+        <label for="tag_${idx}">Tag</label>
+        <select class="tag-select" id="tag_${idx}" data-idx="${idx}" onchange="saveNote(${idx})">
+          ${tagOptionsHtml(currentTag)}
+        </select>
+      </div>
       <label class="note-label" for="${noteId(h)}">Your Note</label>
       <textarea
         class="note-textarea"
@@ -196,12 +212,15 @@ function renderHighlights(highlights) {
   });
 }
 
-// ── Save note ────────────────────────────────────────────────────────────────
+// ── Save note (and tag) ─────────────────────────────────────────────────────
 async function saveNote(idx) {
   const h = currentHighlights[idx];
   const textarea = document.getElementById(noteId(h));
+  const tagSelect = document.getElementById('tag_' + idx);
   const statusEl = document.getElementById('status_' + idx);
   const btn = textarea.closest('.highlight-card').querySelector('.btn-save-note');
+
+  const tagValue = tagSelect ? tagSelect.value : '';
 
   btn.disabled = true;
   try {
@@ -213,7 +232,8 @@ async function saveNote(idx) {
         spineIndex: h.spineIndex,
         startPage: h.startPage,
         startWordIndex: h.startWordIndex,
-        text: textarea.value.trim()
+        text: textarea.value.trim(),
+        tag: tagValue
       })
     });
     if (!res.ok) throw new Error(await res.text());
@@ -223,6 +243,12 @@ async function saveNote(idx) {
       currentHighlights[idx].note = {};
     }
     currentHighlights[idx].note.text = textarea.value.trim();
+    currentHighlights[idx].note.tag = tagValue;
+
+    const badgeEl = document.getElementById('tagbadge_' + idx);
+    if (badgeEl) {
+      badgeEl.innerHTML = tagValue ? `<span class="note-tag">${escapeHtml(tagValue)}</span>` : '';
+    }
 
     statusEl.classList.add('visible');
     setTimeout(() => statusEl.classList.remove('visible'), 2500);

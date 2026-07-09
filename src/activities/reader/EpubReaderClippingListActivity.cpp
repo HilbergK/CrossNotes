@@ -1,5 +1,6 @@
 #include "EpubReaderClippingListActivity.h"
 
+#include <Arduino.h>  // for delay()
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -8,7 +9,9 @@
 
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
+#include "activities/home/BookActions.h"
 #include "activities/home/FileBrowserActionActivity.h"
+#include "activities/reader/TagPickerActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -21,6 +24,14 @@ constexpr int DETAIL_SIDE_MARGIN = 20;
 constexpr int DETAIL_BOTTOM_RESERVE = 55;
 constexpr int DETAIL_LINE_GAP = 6;
 constexpr unsigned long CLIPPING_DELETE_HOLD_MS = 1000;
+// KeyboardEntryActivity's line-wrapping re-measures the whole remaining
+// string on every trimmed character while it hunts for a fitting line
+// width — effectively O(n^2) in text length. That's fine for normal notes
+// but a very long note (e.g. written on the phone, up to kNoteTextMax)
+// can take long enough to trip the watchdog. Block on-device editing above
+// this length rather than risk a reboot; such notes are still fully
+// editable from Phone Notes.
+constexpr size_t EDIT_NOTE_MAX_LENGTH = 600;
 
 bool isUtf8SpaceAt(const std::string& text, const size_t index, size_t& advance) {
   const auto c = static_cast<unsigned char>(text[index]);
@@ -284,9 +295,10 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
   const Clipping selectedClipping = clippings[selectedIndex];
   const char* title = selectedClipping.chapterTitle[0] != '\0' ? selectedClipping.chapterTitle : tr(STR_CLIPPINGS);
   std::vector<FileBrowserActionActivity::MenuItem> items;
-  items.reserve(3);
+  items.reserve(4);
   items.push_back({FileBrowserAction::OpenClipping, StrId::STR_OPEN});
   if (!bookPath.empty()) {
+    items.push_back({FileBrowserAction::EditTag, StrId::STR_EDIT_TAG});
     items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
   }
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
@@ -308,6 +320,10 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
         }
         if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::OpenClipping) {
           jumpToSelectedClipping();
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditTag) {
+          editTagForClipping(selectedClipping);
           return;
         }
         if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditNote) {
@@ -334,9 +350,38 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
       });
 }
 
+void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping) {
+  const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+  const char currentTag = existing != nullptr ? existing->tag : 0;
+
+  startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput, currentTag),
+                         [this, clipping](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto& tagResult = std::get<TagResult>(result.data);
+                             if (!tagResult.noteText.empty()) {
+                               NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
+                                              clipping.startWordIndex, tagResult.noteText.c_str());
+                             } else {
+                               // tag == 0 clears the tag while preserving any existing note text.
+                               NOTES.saveTag(bookPath.c_str(), clipping.spineIndex, clipping.startPage,
+                                             clipping.startWordIndex, tagResult.tag);
+                             }
+                             detailLayoutWidth = 0;  // tag changed — force detail re-layout
+                           }
+                           requestUpdate();
+                         });
+}
+
 void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clipping) {
   const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
   const std::string initialText = existing != nullptr ? existing->text : std::string{};
+
+  if (initialText.length() > EDIT_NOTE_MAX_LENGTH) {
+    BookActions::drawToast(renderer, tr(STR_NOTE_TOO_LONG_TO_EDIT));
+    delay(1000);
+    requestUpdate();
+    return;
+  }
 
   startActivityForResult(
       std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_EDIT_NOTE), initialText,

@@ -2,7 +2,7 @@ _language_name: "Slovenčina"
 _language_code: "SK"
 _order: "25"
 
-STR_CROSSINK: "CrossInk"
+STR_CROSSINK: "CrossNotes"
 STR_BOOTING: "SPÚŠŤANIE"
 STR_SLEEPING: "SPÁNOK"
 STR_ENTERING_SLEEP: "Prechod do režimu spánku"

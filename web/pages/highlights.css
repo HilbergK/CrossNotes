@@ -207,6 +207,29 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tag-row label {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--label-color);
+}
+
+.tag-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--font-color);
+}
+
 .note-actions {
   display: flex;
   justify-content: flex-end;

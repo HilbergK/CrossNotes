@@ -112,7 +112,13 @@ void CrossPointWebServerActivity::onExit() {
     delete dnsServer;
     dnsServer = nullptr;
   }
-  delay(50);
+  // Give the TCP/IP stack time to finish tearing down any client sockets
+  // server->stop() just closed. A phone whose browser tab was closed but
+  // stayed associated to the hotspot can leave a socket half-open; ripping
+  // the AP radio out from under it too quickly has been observed to crash.
+  // We're about to hard-reboot regardless, so this delay just buys lwIP
+  // breathing room — it doesn't need to be a graceful WiFi teardown.
+  delay(200);
 
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
   if (WiFi.getMode() != WIFI_MODE_NULL) {
@@ -121,7 +127,7 @@ void CrossPointWebServerActivity::onExit() {
     } else {
       WiFi.disconnect(false);
     }
-    delay(30);
+    delay(250);
     silentRestart();
   }
 

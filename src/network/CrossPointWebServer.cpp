@@ -2072,6 +2072,10 @@ void CrossPointWebServer::handlePostNote() {
   const uint16_t startPage = doc["startPage"] | 0;
   const uint16_t startWordIndex = doc["startWordIndex"] | 0;
   const std::string text = doc["text"] | std::string("");
+  // "tag" is optional — only present when the phone UI's tag picker was used,
+  // so a text-only save doesn't clobber an existing tag.
+  const bool hasTag = doc["tag"].is<JsonVariant>();
+  const std::string tagStr = doc["tag"] | std::string("");
 
   if (path.empty()) {
     server->send(400, "text/plain", "Missing book path");
@@ -2080,10 +2084,16 @@ void CrossPointWebServer::handlePostNote() {
 
   NOTES.loadForBook(path.c_str(), "epub");
 
-  if (text.empty()) {
+  const bool tagWillBeEmpty = !hasTag || tagStr.empty();
+  if (text.empty() && tagWillBeEmpty) {
     NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex);
   } else {
+    // Always write text (even "") so an intentionally-cleared note body is
+    // actually blanked rather than left stale; saveNote preserves the tag.
     NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, text.c_str());
+    if (hasTag) {
+      NOTES.saveTag(path.c_str(), spineIndex, startPage, startWordIndex, tagStr.empty() ? 0 : tagStr[0]);
+    }
   }
 
   NOTES.unload();

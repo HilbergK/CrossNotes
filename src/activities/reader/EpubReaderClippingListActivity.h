@@ -45,5 +45,6 @@ class EpubReaderClippingListActivity final : public Activity {
   void rebuildDetailLayoutIfNeeded();
   void showClippingActionMenu(bool ignoreInitialConfirmRelease);
   void editNoteForClipping(const Clipping& clipping);
+  void editTagForClipping(const Clipping& clipping);
   void renderDetail();
 };

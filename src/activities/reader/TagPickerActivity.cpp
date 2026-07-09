@@ -10,8 +10,15 @@
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
-TagPickerActivity::TagPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("TagPicker", renderer, mappedInput) {}
+TagPickerActivity::TagPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char initialTag)
+    : Activity("TagPicker", renderer, mappedInput) {
+  for (int i = 0; i < OPTION_COUNT; i++) {
+    if (OPTIONS[i].tag == initialTag && i != WRITE_NOTE_INDEX) {
+      selectedIndex = i;
+      break;
+    }
+  }
+}
 
 void TagPickerActivity::onEnter() {
   Activity::onEnter();

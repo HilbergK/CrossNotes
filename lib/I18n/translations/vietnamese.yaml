@@ -2,7 +2,7 @@ _language_name: "Tiếng Việt"
 _language_code: "VI"
 _order: "24"
 
-STR_CROSSINK: "CrossInk"
+STR_CROSSINK: "CrossNotes"
 STR_BOOTING: "ĐANG KHỞI ĐỘNG"
 STR_SLEEPING: "ĐANG NGỦ"
 STR_ENTERING_SLEEP: "Đang chuyển sang chế độ ngủ"

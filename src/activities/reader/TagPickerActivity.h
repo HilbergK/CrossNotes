@@ -5,7 +5,9 @@
 
 class TagPickerActivity final : public Activity {
  public:
-  TagPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  // initialTag preselects the matching row (e.g. when re-opening the picker
+  // to change an existing tag). 0 = "No tag" is selected, which is index 0.
+  TagPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, char initialTag = 0);
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
