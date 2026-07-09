@@ -284,49 +284,54 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
   const Clipping selectedClipping = clippings[selectedIndex];
   const char* title = selectedClipping.chapterTitle[0] != '\0' ? selectedClipping.chapterTitle : tr(STR_CLIPPINGS);
   std::vector<FileBrowserActionActivity::MenuItem> items;
-  items.reserve(2);
+  items.reserve(3);
+  items.push_back({FileBrowserAction::OpenClipping, StrId::STR_OPEN});
   if (!bookPath.empty()) {
     items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
   }
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
 
-  startActivityForResult(std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, title, std::move(items),
-                                                                     ignoreInitialConfirmRelease),
-                         [this, selectedClipping](const ActivityResult& result) {
-                           longPressConfirmHandled = false;
-                           if (result.isCancelled) {
-                             requestUpdate();
-                             return;
-                           }
+  startActivityForResult(
+      std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, title, std::move(items),
+                                                  ignoreInitialConfirmRelease),
+      [this, selectedClipping](const ActivityResult& result) {
+        longPressConfirmHandled = false;
+        if (result.isCancelled) {
+          requestUpdate();
+          return;
+        }
 
-                           const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
-                           if (!actionResult) {
-                             requestUpdate();
-                             return;
-                           }
-                           if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditNote) {
-                             editNoteForClipping(selectedClipping);
-                             return;
-                           }
-                           if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
-                             requestUpdate();
-                             return;
-                           }
+        const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
+        if (!actionResult) {
+          requestUpdate();
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::OpenClipping) {
+          jumpToSelectedClipping();
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditNote) {
+          editNoteForClipping(selectedClipping);
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
+          requestUpdate();
+          return;
+        }
 
-                           const auto it = std::find_if(
-                               clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
-                                 return clipping.spineIndex == selectedClipping.spineIndex &&
-                                        clipping.startPage == selectedClipping.startPage &&
-                                        clipping.startWordIndex == selectedClipping.startWordIndex &&
-                                        clipping.timestamp == selectedClipping.timestamp;
-                               });
-                           if (it != clippings.end()) {
-                             selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
-                             deleteSelectedClipping();
-                           } else {
-                             requestUpdate();
-                           }
-                         });
+        const auto it = std::find_if(clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
+          return clipping.spineIndex == selectedClipping.spineIndex &&
+                 clipping.startPage == selectedClipping.startPage &&
+                 clipping.startWordIndex == selectedClipping.startWordIndex &&
+                 clipping.timestamp == selectedClipping.timestamp;
+        });
+        if (it != clippings.end()) {
+          selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
+          deleteSelectedClipping();
+        } else {
+          requestUpdate();
+        }
+      });
 }
 
 void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clipping) {
@@ -385,7 +390,9 @@ void EpubReaderClippingListActivity::loop() {
     }
     if (!clippings.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
       if (detailMode) {
-        jumpToSelectedClipping();
+        // Open the action menu (Open / Edit Note / Delete) — more discoverable
+        // than hiding note editing behind a long press only.
+        showClippingActionMenu(false);
       } else {
         openSelectedDetail();
       }
@@ -490,7 +497,7 @@ void EpubReaderClippingListActivity::renderDetail() {
                       renderer.getScreenHeight() - 35, pageBuf);
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), detailPage > 0 ? tr(STR_DIR_UP) : "",
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_MENU), detailPage > 0 ? tr(STR_DIR_UP) : "",
                                             detailPage < detailPageCount - 1 ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
 }

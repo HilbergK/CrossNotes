@@ -263,11 +263,8 @@ inline SettingInfo buildSleepScreenSetting() {
 // ACTION-type entries and entries without a key are device-only.
 //
 // The static list is constructed exactly once (master's optimization, #1086 +
-// #1636) so the per-entry SettingInfo cost is paid once. When an
-// SdCardFontRegistry is supplied AND has SD card fonts installed, the
-// font-family entry is replaced in a per-call copy with a registry-aware
-// version. Callers without SD fonts pay only a vector copy.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+// #1636) so the per-entry SettingInfo cost is paid once.
+inline const std::vector<SettingInfo>& getBaseSettingsList() {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v;
     v.reserve(66);
@@ -684,8 +681,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
     return v;
   }();
+  return baseList;
+}
 
-  std::vector<SettingInfo> v = baseList;
+// Per-call copy of the base list with device- and registry-aware entry
+// replacements. Device UI callers pay one vector copy.
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+  std::vector<SettingInfo> v = getBaseSettingsList();
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
@@ -705,6 +707,49 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
   }
   return v;
+}
+
+// Visit every effective setting entry WITHOUT deep-copying the whole list.
+// Used by the web settings API: the full per-request copy of ~66 SettingInfo
+// entries (each holding several vectors and std::function captures) was a
+// large heap-churn spike in AP mode with the WiFi stack loaded, and could
+// abort the firmware on a fragmented heap. Only the handful of entries that
+// differ per device/registry are built on demand.
+template <typename Fn>
+inline void forEachSettingForWeb(const SdCardFontRegistry* registry, Fn&& fn) {
+  const auto& base = getBaseSettingsList();
+  const bool hasSdFonts = registry != nullptr && registry->getFamilyCount() > 0;
+
+  SettingInfo fontFamilyOverride;
+  SettingInfo fontSizeOverride;
+  if (hasSdFonts) {
+    fontFamilyOverride = buildFontFamilySetting(registry);
+    fontSizeOverride = buildFontSizeSetting(registry);
+  }
+
+  SettingInfo sleepScreenOverride;
+  bool hasSleepScreenOverride = false;
+  if (!gpio.deviceIsX3()) {
+    const auto it = std::find_if(base.begin(), base.end(),
+                                 [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
+    if (it != base.end()) {
+      sleepScreenOverride = *it;
+      removeEnumRawValue(sleepScreenOverride, static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP));
+      hasSleepScreenOverride = true;
+    }
+  }
+
+  for (const auto& s : base) {
+    if (hasSdFonts && s.nameId == StrId::STR_FONT_FAMILY) {
+      fn(fontFamilyOverride);
+    } else if (hasSdFonts && s.nameId == StrId::STR_FONT_SIZE) {
+      fn(fontSizeOverride);
+    } else if (hasSleepScreenOverride && s.nameId == StrId::STR_SLEEP_SCREEN) {
+      fn(sleepScreenOverride);
+    } else {
+      fn(s);
+    }
+  }
 }
 
 inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector<SettingInfo>& allSettings) {

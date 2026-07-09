@@ -53,7 +53,6 @@ enum class HomeMenuAction {
   ReadingStats,
   Bookmarks,
   FileTransfer,
-  MyNotes,     // CrossInk Notes — on-device notes browser
   QuickNotes,  // CrossInk Notes — "Phone Notes" hotspot + QR
   Settings,
 };
@@ -65,7 +64,7 @@ struct HomeMenuEntry {
 };
 
 struct HomeMenuEntries {
-  static constexpr int kCapacity = 10;
+  static constexpr int kCapacity = 9;
   std::array<HomeMenuEntry, kCapacity> entries{};
   int count = 0;
 
@@ -223,7 +222,6 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
     items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
   }
 
-  items.push({"My Notes", BookmarkIcon, HomeMenuAction::MyNotes});
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
   items.push({"Phone Notes", Transfer, HomeMenuAction::QuickNotes});
   items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});
@@ -513,7 +511,7 @@ static_assert(HomeActivity::kMaxCachedBooks >= LyraCarouselMetrics::values.homeR
 
 int HomeActivity::getMenuItemCount() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int count = 6;  // File Browser, Recents, My Notes, File transfer, Phone Notes, Settings
+  int count = 5;  // File Browser, Recents, File transfer, Phone Notes, Settings
   if (!metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     count += getVisibleRecentBookCount();
   } else if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -1350,9 +1348,6 @@ void HomeActivity::loop() {
           case HomeMenuAction::FileTransfer:
             onFileTransferOpen();
             break;
-          case HomeMenuAction::MyNotes:
-            activityManager.goToNotesHome();
-            break;
           case HomeMenuAction::QuickNotes:
             activityManager.goToQuickNotes();
             break;
@@ -1547,9 +1542,6 @@ void HomeActivity::loop() {
         break;
       case HomeMenuAction::FileTransfer:
         onFileTransferOpen();
-        break;
-      case HomeMenuAction::MyNotes:
-        activityManager.goToNotesHome();
         break;
       case HomeMenuAction::QuickNotes:
         activityManager.goToQuickNotes();

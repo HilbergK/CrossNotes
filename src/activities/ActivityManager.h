@@ -94,7 +94,6 @@ class ActivityManager {
   void goToJoinNetworkFileTransfer(std::string returnBookPath = {});
   void goToHotspotFileTransfer(std::string returnBookPath = {});
   void goToQuickNotes();  // CrossInk Notes — "Phone Notes": hotspot + QR straight to notes page
-  void goToNotesHome();   // CrossInk Notes — "My Notes" on-device browser
   void goToNearbyStatsSync();
   void goToSettings();
   void goToFileBrowser(std::string path = {});

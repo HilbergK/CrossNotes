@@ -1745,11 +1745,63 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
     return item;
   }
 
-  while (!item.empty() && getTextWidth(fontId, (item + ellipsis).c_str(), style) >= maxWidth) {
-    utf8RemoveLastChar(item);
+  // Binary-search the longest prefix (in whole UTF-8 characters) whose width
+  // with the ellipsis stays under maxWidth. The previous approach trimmed one
+  // character and re-measured the whole string per iteration — O(n^2) in text
+  // length, which caused visible lag on lists that truncate long strings.
+  const auto byteOffsetForChars = [&item](size_t charCount) {
+    size_t i = 0;
+    size_t seen = 0;
+    while (i < item.size() && seen < charCount) {
+      const auto c = static_cast<unsigned char>(item[i]);
+      size_t len = 1;
+      if ((c & 0xE0) == 0xC0) {
+        len = 2;
+      } else if ((c & 0xF0) == 0xE0) {
+        len = 3;
+      } else if ((c & 0xF8) == 0xF0) {
+        len = 4;
+      }
+      i = std::min(i + len, item.size());
+      seen++;
+    }
+    return i;
+  };
+  const size_t totalChars = [&item] {
+    size_t count = 0;
+    for (size_t i = 0; i < item.size(); count++) {
+      const auto c = static_cast<unsigned char>(item[i]);
+      size_t len = 1;
+      if ((c & 0xE0) == 0xC0) {
+        len = 2;
+      } else if ((c & 0xF0) == 0xE0) {
+        len = 3;
+      } else if ((c & 0xF8) == 0xF0) {
+        len = 4;
+      }
+      i = std::min(i + len, item.size());
+    }
+    return count;
+  }();
+
+  const auto fitsWithEllipsis = [&](size_t charCount) {
+    const std::string candidate = item.substr(0, byteOffsetForChars(charCount)) + ellipsis;
+    return getTextWidth(fontId, candidate.c_str(), style) < maxWidth;
+  };
+
+  // Largest k in [0, totalChars] with fitsWithEllipsis(k).
+  size_t lo = 0;
+  size_t hi = totalChars;
+  while (lo < hi) {
+    const size_t mid = lo + (hi - lo + 1) / 2;
+    if (fitsWithEllipsis(mid)) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
   }
 
-  return item.empty() ? ellipsis : item + ellipsis;
+  return lo == 0 ? ellipsis : item.substr(0, byteOffsetForChars(lo)) + ellipsis;
 }
 
 std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* text, const int maxWidth,

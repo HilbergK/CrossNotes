@@ -1153,22 +1153,28 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
-  // Pass the SD font registry so the fontFamily setting's enumStringValues
-  // includes SD-resident families — otherwise the web API only exposes the
-  // three built-in fonts.
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  LOG_INF("WEB", "Settings GET: free heap %u", ESP.getFreeHeap());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
 
   char output[512];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  for (const auto& s : settings) {
-    if (!s.key) continue;  // Skip ACTION-only entries
+  // Batch entries into ~1KB chunks: sending each of the ~66 settings as its
+  // own HTTP chunk stalls slow phone connections long enough to trip the
+  // main-task watchdog.
+  String batch;
+  batch.reserve(1536);
+  batch += "[";
+
+  // forEachSettingForWeb avoids deep-copying the whole settings list on the
+  // heap (see SettingsList.h). Pass the SD font registry so the fontFamily
+  // setting's options include SD-resident families.
+  forEachSettingForWeb(&sdFontSystem.registry(), [&](const SettingInfo& s) {
+    if (!s.key) return;  // Skip ACTION-only entries
 
     doc.clear();
     doc["key"] = s.key;
@@ -1222,26 +1228,32 @@ void CrossPointWebServer::handleGetSettings() const {
         break;
       }
       default:
-        continue;
+        return;
     }
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) {
       LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
-      continue;
+      return;
     }
 
     if (seenFirst) {
-      server->sendContent(",");
+      batch += ",";
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
-  }
+    batch += output;
+    if (batch.length() >= 1024) {
+      server->sendContent(batch);
+      batch = "";
+      esp_task_wdt_reset();
+    }
+  });
 
-  server->sendContent("]");
+  batch += "]";
+  server->sendContent(batch);
   server->sendContent("");
-  LOG_DBG("WEB", "Served settings API");
+  LOG_INF("WEB", "Served settings API, free heap %u", ESP.getFreeHeap());
 }
 
 void CrossPointWebServer::handlePostSettings() {
@@ -1258,12 +1270,12 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 
-  for (const auto& s : settings) {
-    if (!s.key) continue;
-    if (!doc[s.key].is<JsonVariant>()) continue;
+  // Copy-free iteration — see handleGetSettings.
+  forEachSettingForWeb(&sdFontSystem.registry(), [&](const SettingInfo& s) {
+    if (!s.key) return;
+    if (!doc[s.key].is<JsonVariant>()) return;
 
     switch (s.type) {
       case SettingType::TOGGLE: {
@@ -1317,7 +1329,7 @@ void CrossPointWebServer::handlePostSettings() {
       default:
         break;
     }
-  }
+  });
 
   SETTINGS.saveToFile();
 

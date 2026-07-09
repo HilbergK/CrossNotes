@@ -5,7 +5,10 @@
 #include <vector>
 
 inline constexpr size_t CLIPPING_CHAPTER_TITLE_MAX = 48;
-inline constexpr size_t CLIPPING_TEXT_MAX = 512;
+// 1024 ≈ 150-180 words per highlight. Worst case RAM while a book's clippings
+// are loaded: CLIPPING_MAX_PER_BOOK * CLIPPING_TEXT_MAX = 64KB — acceptable in
+// clipping-list/web contexts, which is where full clippings are held.
+inline constexpr size_t CLIPPING_TEXT_MAX = 1024;
 inline constexpr uint16_t CLIPPING_MAX_PER_BOOK = 64;
 
 struct Clipping {
