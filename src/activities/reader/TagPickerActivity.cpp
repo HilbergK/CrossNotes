@@ -3,7 +3,9 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "NoteStore.h"
 #include "activities/ActivityResult.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -14,6 +16,23 @@ TagPickerActivity::TagPickerActivity(GfxRenderer& renderer, MappedInputManager& 
 void TagPickerActivity::onEnter() {
   Activity::onEnter();
   requestUpdate();
+}
+
+void TagPickerActivity::openNoteKeyboard() {
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Write Note", "", NoteStore::kNoteTextMax),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& kb = std::get<KeyboardResult>(result.data);
+          if (!kb.text.empty()) {
+            setResult(TagResult{0, kb.text});
+            finish();
+            return;
+          }
+        }
+        // Keyboard cancelled or empty — stay on the picker.
+        requestUpdate();
+      });
 }
 
 void TagPickerActivity::loop() {
@@ -29,6 +48,10 @@ void TagPickerActivity::loop() {
 
   // Confirm — select current option
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (selectedIndex == WRITE_NOTE_INDEX) {
+      openNoteKeyboard();
+      return;
+    }
     setResult(TagResult{OPTIONS[selectedIndex].tag});
     finish();
     return;
@@ -58,10 +81,21 @@ void TagPickerActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
 
-  // Use GUI.drawList — rowIcon is optional (nullptr = no icon column)
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, OPTION_COUNT, selectedIndex,
-      [](int i) { return std::string(OPTIONS[i].label); }, [](int i) { return std::string(OPTIONS[i].description); });
+  // Custom rows sized to fill the whole page — symbols only, no pagination.
+  const int rowHeight = contentHeight / OPTION_COUNT;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+
+  for (int i = 0; i < OPTION_COUNT; i++) {
+    const int rowY = contentTop + i * rowHeight;
+    const bool isSelected = i == selectedIndex;
+    if (isSelected) {
+      renderer.fillRect(0, rowY, pageWidth, rowHeight, true);
+    }
+    const char* label = OPTIONS[i].label;
+    const int textX = (pageWidth - renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
+    const int textY = rowY + (rowHeight - lineHeight) / 2;
+    renderer.drawText(UI_12_FONT_ID, textX, textY, label, !isSelected, EpdFontFamily::BOLD);
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

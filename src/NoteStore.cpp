@@ -8,7 +8,7 @@
 
 static constexpr const char* LOG_TAG = "NoteStore";
 static constexpr const char* NOTES_DIR = "/.crosspoint/notes/";
-static constexpr size_t NOTE_TEXT_MAX = 4096;
+static constexpr size_t NOTE_TEXT_MAX = NoteStore::kNoteTextMax;
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
 

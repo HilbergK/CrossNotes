@@ -10,25 +10,32 @@ class TagPickerActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
 
-  static constexpr int OPTION_COUNT = 7;
+  static constexpr int OPTION_COUNT = 11;
+  // Last row opens the on-device keyboard instead of returning a tag.
+  static constexpr int WRITE_NOTE_INDEX = OPTION_COUNT - 1;
 
   struct Option {
-    char tag;  // 0 = skip (no tag)
+    char tag;  // 0 = no tag
     const char* label;
-    const char* description;
   };
 
   static constexpr Option OPTIONS[OPTION_COUNT] = {
-      {'!', "Important", "!  Mark for review"},
-      {'?', "Question", "?  I don't understand this"},
-      {'>', "Key argument", ">  Core thesis / main point"},
-      {'<', "Counterpoint", "<  Challenges the argument"},
-      {'*', "Cite", "*  Worth referencing later"},
-      {'~', "Verify", "~  Check this claim"},
-      {0, "Skip", "   No tag — just save"},
+      {0, "No tag"},
+      {'!', "!"},
+      {'?', "?"},
+      {'*', "*"},
+      {'~', "~"},
+      {'+', "+"},
+      {'=', "="},
+      {'#', "#"},
+      {'<', "<"},
+      {'>', ">"},
+      {0, "Write a note..."},
   };
 
  private:
   int selectedIndex = 0;
   ButtonNavigator buttonNavigator;
+
+  void openNoteKeyboard();
 };

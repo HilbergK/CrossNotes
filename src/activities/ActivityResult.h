@@ -112,7 +112,8 @@ struct ClippingJumpResult {
 };
 
 struct TagResult {
-  char tag = 0;  // 0 = skipped. Otherwise: '!' '?' '>' '<' '*' '~'
+  char tag = 0;               // 0 = no tag. Otherwise one of the picker symbols.
+  std::string noteText = {};  // note typed on-device via "Write a note..." (empty = none)
 };
 
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,

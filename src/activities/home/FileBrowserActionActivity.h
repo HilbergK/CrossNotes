@@ -24,6 +24,7 @@ enum class FileBrowserAction : int {
   DeleteClippings = 12,
   EpubRenderMode = 13,
   ResetReaderSettings = 14,
+  EditNote = 15,  // CrossInk Notes — edit a clipping's note on-device
 };
 
 class FileBrowserActionActivity final : public Activity {

@@ -19,6 +19,9 @@ struct Note {
 
 class NoteStore {
  public:
+  // Maximum stored note length; longer text is truncated on save.
+  static constexpr size_t kNoteTextMax = 4096;
+
   static NoteStore& getInstance();
 
   // Load all notes for a book. Must be called before getNotesForBook / getNoteForClipping.

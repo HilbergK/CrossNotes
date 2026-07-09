@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
 #include "activities/home/FileBrowserActionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -228,6 +229,31 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
 
   buildWrappedDetailLines(renderer, UI_10_FONT_ID, detailText, textWidth, detailLines);
   if (detailLines.empty()) detailLines.push_back("");
+
+  // Append the note (if any) directly below the quote so it reads as one flow.
+  if (selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
+    const Clipping& clipping = clippings[selectedIndex];
+    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+    if (note != nullptr && (note->tag != 0 || !note->text.empty())) {
+      detailLines.push_back("");
+      std::string label = "Note";
+      if (note->tag != 0) {
+        label += " [";
+        label += note->tag;
+        label += "]";
+      }
+      label += ":";
+      detailLines.push_back(std::move(label));
+      if (!note->text.empty()) {
+        std::string noteFlat;
+        buildOneLineSnippetText(note->text, noteFlat);
+        std::vector<std::string> noteLines;
+        buildWrappedDetailLines(renderer, UI_10_FONT_ID, noteFlat, textWidth, noteLines);
+        detailLines.insert(detailLines.end(), noteLines.begin(), noteLines.end());
+      }
+    }
+  }
+
   detailLayoutWidth = textWidth;
   detailLinesPerPage = linesPerPage;
   detailPage = std::min(detailPage, getDetailPageCount() - 1);
@@ -258,37 +284,77 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
   const Clipping selectedClipping = clippings[selectedIndex];
   const char* title = selectedClipping.chapterTitle[0] != '\0' ? selectedClipping.chapterTitle : tr(STR_CLIPPINGS);
   std::vector<FileBrowserActionActivity::MenuItem> items;
-  items.reserve(1);
+  items.reserve(2);
+  if (!bookPath.empty()) {
+    items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
+  }
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
 
+  startActivityForResult(std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, title, std::move(items),
+                                                                     ignoreInitialConfirmRelease),
+                         [this, selectedClipping](const ActivityResult& result) {
+                           longPressConfirmHandled = false;
+                           if (result.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+
+                           const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
+                           if (!actionResult) {
+                             requestUpdate();
+                             return;
+                           }
+                           if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditNote) {
+                             editNoteForClipping(selectedClipping);
+                             return;
+                           }
+                           if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
+                             requestUpdate();
+                             return;
+                           }
+
+                           const auto it = std::find_if(
+                               clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
+                                 return clipping.spineIndex == selectedClipping.spineIndex &&
+                                        clipping.startPage == selectedClipping.startPage &&
+                                        clipping.startWordIndex == selectedClipping.startWordIndex &&
+                                        clipping.timestamp == selectedClipping.timestamp;
+                               });
+                           if (it != clippings.end()) {
+                             selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
+                             deleteSelectedClipping();
+                           } else {
+                             requestUpdate();
+                           }
+                         });
+}
+
+void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clipping) {
+  const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+  const std::string initialText = existing != nullptr ? existing->text : std::string{};
+
   startActivityForResult(
-      std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, title, std::move(items),
-                                                  ignoreInitialConfirmRelease),
-      [this, selectedClipping](const ActivityResult& result) {
-        longPressConfirmHandled = false;
-        if (result.isCancelled) {
-          requestUpdate();
-          return;
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_EDIT_NOTE), initialText,
+                                              NoteStore::kNoteTextMax),
+      [this, clipping](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& kb = std::get<KeyboardResult>(result.data);
+          const Note* existing =
+              NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+          if (!kb.text.empty()) {
+            NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex,
+                           kb.text.c_str());
+          } else if (existing != nullptr) {
+            if (existing->tag != 0) {
+              // Cleared the text but a tag exists — keep the tag, drop the text.
+              NOTES.saveNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex, "");
+            } else {
+              NOTES.deleteNote(bookPath.c_str(), clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
+            }
+          }
+          detailLayoutWidth = 0;  // note changed — force detail re-layout
         }
-
-        const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
-        if (!actionResult || static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
-          requestUpdate();
-          return;
-        }
-
-        const auto it = std::find_if(clippings.begin(), clippings.end(), [&selectedClipping](const Clipping& clipping) {
-          return clipping.spineIndex == selectedClipping.spineIndex &&
-                 clipping.startPage == selectedClipping.startPage &&
-                 clipping.startWordIndex == selectedClipping.startWordIndex &&
-                 clipping.timestamp == selectedClipping.timestamp;
-        });
-        if (it != clippings.end()) {
-          selectedIndex = static_cast<int>(std::distance(clippings.begin(), it));
-          deleteSelectedClipping();
-        } else {
-          requestUpdate();
-        }
+        requestUpdate();
       });
 }
 
@@ -422,27 +488,6 @@ void EpubReaderClippingListActivity::renderDetail() {
     const int pageLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, pageBuf);
     renderer.drawText(SMALL_FONT_ID, contentX + contentWidth - DETAIL_SIDE_MARGIN - pageLabelWidth,
                       renderer.getScreenHeight() - 35, pageBuf);
-  }
-
-  if (!clippings.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(clippings.size())) {
-    const Clipping& clipping = clippings[selectedIndex];
-    const Note* note = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex);
-    if (note != nullptr) {
-      const int noteY = renderer.getScreenHeight() - DETAIL_BOTTOM_RESERVE - 20;
-      const int noteX = contentX + DETAIL_SIDE_MARGIN;
-      const int noteWidth = contentWidth - DETAIL_SIDE_MARGIN * 2;
-      std::string noteSnippet;
-      if (note->tag != 0) {
-        noteSnippet += "[";
-        noteSnippet += note->tag;
-        noteSnippet += "] ";
-      }
-      std::string textSnippet;
-      buildOneLineSnippetText(note->text, textSnippet);
-      noteSnippet += textSnippet;
-      const std::string noteTrunc = renderer.truncatedText(SMALL_FONT_ID, noteSnippet.c_str(), noteWidth);
-      renderer.drawText(SMALL_FONT_ID, noteX, noteY, noteTrunc.c_str());
-    }
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), detailPage > 0 ? tr(STR_DIR_UP) : "",

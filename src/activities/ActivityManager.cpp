@@ -213,11 +213,6 @@ void ActivityManager::goToQuickNotes() {
 
 void ActivityManager::goToNotesHome() { replaceActivity(std::make_unique<NotesHomeActivity>(renderer, mappedInput)); }
 
-void ActivityManager::goToScreenshots() {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, NetworkMode::CREATE_HOTSPOT,
-                                                                std::string{}, "highlights#screenshots"));
-}
-
 void ActivityManager::goToNearbyStatsSync() {
   replaceActivity(std::make_unique<NearbyStatsSyncActivity>(renderer, mappedInput));
 }

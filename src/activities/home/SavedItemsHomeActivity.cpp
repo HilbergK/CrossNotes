@@ -269,26 +269,27 @@ void SavedItemsHomeActivity::openBookmarkList(const SavedBookEntry& entry) {
 void SavedItemsHomeActivity::openClippingList(const SavedBookEntry& entry) {
   CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
 
-  startActivityForResult(
-      std::make_unique<EpubReaderClippingListActivity>(renderer, mappedInput, CLIPPINGS.getClippings()),
-      [this, entry](const ActivityResult& result) {
-        if (!result.isCancelled) {
-          const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);
-          if (clipping) {
-            APP_STATE.pendingBookmarkSpine = clipping->spineIndex;
-            APP_STATE.pendingBookmarkProgress =
-                clipping->pageCount > 0 ? static_cast<float>(clipping->page) / clipping->pageCount : 0.0f;
-            APP_STATE.pendingBookmarkParagraphIndex = clipping->paragraphIndex;
-            APP_STATE.pendingClippingIndex = clipping->clippingIndex;
-            APP_STATE.saveToFile();
-            onSelectBook(entry.bookPath);
-          } else {
-            LOG_ERR("SVA", "openClippingList: unexpected result variant");
-            requestUpdate();
-          }
-        } else {
-          reloadSavedBooks();
-          requestUpdate();
-        }
-      });
+  startActivityForResult(std::make_unique<EpubReaderClippingListActivity>(
+                             renderer, mappedInput, CLIPPINGS.getClippings(), CLIPPINGS.getBookFilePath()),
+                         [this, entry](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             const auto* clipping = std::get_if<ClippingJumpResult>(&result.data);
+                             if (clipping) {
+                               APP_STATE.pendingBookmarkSpine = clipping->spineIndex;
+                               APP_STATE.pendingBookmarkProgress =
+                                   clipping->pageCount > 0 ? static_cast<float>(clipping->page) / clipping->pageCount
+                                                           : 0.0f;
+                               APP_STATE.pendingBookmarkParagraphIndex = clipping->paragraphIndex;
+                               APP_STATE.pendingClippingIndex = clipping->clippingIndex;
+                               APP_STATE.saveToFile();
+                               onSelectBook(entry.bookPath);
+                             } else {
+                               LOG_ERR("SVA", "openClippingList: unexpected result variant");
+                               requestUpdate();
+                             }
+                           } else {
+                             reloadSavedBooks();
+                             requestUpdate();
+                           }
+                         });
 }

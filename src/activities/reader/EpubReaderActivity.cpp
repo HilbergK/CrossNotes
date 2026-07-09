@@ -2943,6 +2943,10 @@ void EpubReaderActivity::startClipSelection() {
                                            NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord,
                                                          tagResult.tag);
                                          }
+                                         if (!tagResult.noteText.empty()) {
+                                           NOTES.saveNote(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord,
+                                                          tagResult.noteText.c_str());
+                                         }
                                        }
                                        drawToast(renderer, tr(STR_CLIPPING_SAVED));
                                        delay(1000);
