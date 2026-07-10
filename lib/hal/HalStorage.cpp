@@ -1,9 +1,11 @@
 #define HAL_STORAGE_IMPL
 #include "HalStorage.h"
 
+#include <Arduino.h>
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <HalClock.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <SDCardManager.h>
 
 #include <cassert>
@@ -182,8 +184,23 @@ HalFile& HalFile::operator=(HalFile&& other) {
 }
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
-  return HalFile(std::make_unique<HalFile::Impl>(SDCard.open(path, oflag)));
+  FsFile fsFile;
+  {
+    StorageLock lock;  // ensure thread safety for the duration of this function
+    fsFile = SDCard.open(path, oflag);
+  }
+  if (!fsFile) {
+    return HalFile();
+  }
+  auto impl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!impl) {
+    LOG_ERR("SD", "OOM: HalFile wrapper for %s (%u free, %u max alloc)", path, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    StorageLock lock;
+    fsFile.close();
+    return HalFile();
+  }
+  return HalFile(std::move(impl));
 }
 
 bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag); }
@@ -198,14 +215,26 @@ bool HalStorage::rename(const char* oldPath, const char* newPath) {
 bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
+  file.close();
   FsFile fsFile;
   bool ok = false;
   {
     StorageLock lock;  // ensure thread safety for the duration of this function
     ok = SDCard.openFileForRead(moduleName, path, fsFile);
   }
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  if (!ok) {
+    return false;
+  }
+  auto impl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!impl) {
+    LOG_ERR(moduleName, "OOM: HalFile read wrapper for %s (%u free, %u max alloc)", path, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    StorageLock lock;
+    fsFile.close();
+    return false;
+  }
+  file = HalFile(std::move(impl));
+  return true;
 }
 
 bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, HalFile& file) {
@@ -217,14 +246,26 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
+  file.close();
   FsFile fsFile;
   bool ok = false;
   {
     StorageLock lock;  // ensure thread safety for the duration of this function
     ok = SDCard.openFileForWrite(moduleName, path, fsFile);
   }
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  if (!ok) {
+    return false;
+  }
+  auto impl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!impl) {
+    LOG_ERR(moduleName, "OOM: HalFile write wrapper for %s (%u free, %u max alloc)", path, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    StorageLock lock;
+    fsFile.close();
+    return false;
+  }
+  file = HalFile(std::move(impl));
+  return true;
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file) {
@@ -279,7 +320,18 @@ bool HalFile::close() {
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);
-  return HalFile(std::make_unique<Impl>(impl->file.openNextFile()));
+  auto fsFile = impl->file.openNextFile();
+  if (!fsFile) {
+    return HalFile();
+  }
+  auto childImpl = makeUniqueNoThrow<Impl>(std::move(fsFile));
+  if (!childImpl) {
+    LOG_ERR("SD", "OOM: HalFile directory entry wrapper (%u free, %u max alloc)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    fsFile.close();
+    return HalFile();
+  }
+  return HalFile(std::move(childImpl));
 }
 bool HalFile::isOpen() const { return impl != nullptr && impl->file.isOpen(); }  // already thread-safe, no need to wrap
 HalFile::operator bool() const { return isOpen(); }

@@ -121,6 +121,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   }
 
   LOG_DBG("KOSync", "WiFi connected, starting sync");
+  sdFontSystem.releaseForNetwork(renderer);
 
   {
     RenderLock lock(*this);
@@ -300,6 +301,11 @@ void KOReaderSyncActivity::performUpload() {
     }
     requestUpdate(true);
     return;
+  }
+
+  if (epub) {
+    epub.reset();
+    LOG_DBG("KOSync", "Released epub before upload (heap: %u)", (unsigned)ESP.getFreeHeap());
   }
 
   // localProgress was pre-computed in EpubReaderActivity before the Epub was released.

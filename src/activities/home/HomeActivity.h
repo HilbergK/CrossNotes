@@ -49,6 +49,7 @@ class HomeActivity final : public Activity {
   int coverRectW = 0;
   int coverRectH = 0;
   float currentBookProgressPercent = -1.0f;
+  std::string currentBookChapterTitle;
   BookReadingStats currentBookStats;
   GlobalReadingStats globalStats;
   GlobalReadingStats allDevicesGlobalStats;
@@ -80,6 +81,7 @@ class HomeActivity final : public Activity {
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
+  void invalidateCoverCache();
   bool preRenderCarouselFrames(bool showProgressPopup = false);
   void freeCarouselFrames();
   bool allocateCarouselFrameSlots(int targetFrameCount);

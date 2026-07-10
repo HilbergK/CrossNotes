@@ -29,6 +29,35 @@ std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
+void clampCachedRowsToLandscapeStrip(const GfxRenderer& renderer, const int imageY, int& rowStart, int& rowEnd) {
+  if (!renderer.isStripTargetActive()) {
+    return;
+  }
+
+  const int stripY0 = renderer.getWriteOriginY();
+  const int stripY1Exclusive = stripY0 + renderer.getWriteRows();
+  int logicalY0;
+  int logicalY1Exclusive;
+
+  switch (renderer.getOrientation()) {
+    case GfxRenderer::LandscapeCounterClockwise:
+      logicalY0 = stripY0;
+      logicalY1Exclusive = stripY1Exclusive;
+      break;
+    case GfxRenderer::LandscapeClockwise:
+      logicalY0 = renderer.getDisplayHeight() - stripY1Exclusive;
+      logicalY1Exclusive = renderer.getDisplayHeight() - stripY0;
+      break;
+    default:
+      return;
+  }
+
+  const int stripRowStart = logicalY0 - imageY;
+  const int stripRowEnd = logicalY1Exclusive - imageY;
+  if (rowStart < stripRowStart) rowStart = stripRowStart;
+  if (rowEnd > stripRowEnd) rowEnd = stripRowEnd;
+}
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
   FsFile cacheFile;
@@ -75,15 +104,24 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     return true;
   }
 
+  int renderRowStart = clipYStart;
+  int renderRowEnd = clipYEnd;
+  clampCachedRowsToLandscapeStrip(renderer, y, renderRowStart, renderRowEnd);
+  if (renderRowStart >= renderRowEnd) {
+    cacheFile.close();
+    return true;
+  }
+
   // Read several rows per SD access. A full-page image is re-rendered on every
   // grayscale strip pass (~14x per page), and a one-row-per-read loop here means
   // cachedHeight (~728) tiny reads through the storage mutex + SdFat each time —
   // the dominant cost of displaying an image page. Batching rows into a ~4KB
   // buffer cuts that to ~20 reads per pass without holding the whole image.
   const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
+  const int rowsToRender = renderRowEnd - renderRowStart;
   int rowsPerRead = 4096 / bytesPerRow;
   if (rowsPerRead < 1) rowsPerRead = 1;
-  if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
+  if (rowsPerRead > rowsToRender) rowsPerRead = rowsToRender;
   uint8_t* readBuffer = (uint8_t*)malloc((size_t)rowsPerRead * bytesPerRow);
   if (!readBuffer) {
     // Fall back to a single-row buffer under memory pressure.
@@ -99,11 +137,19 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   DirectPixelWriter pw;
   pw.init(renderer);
 
+  const size_t dataOffset = 4U + static_cast<size_t>(renderRowStart) * static_cast<size_t>(bytesPerRow);
+  if (!cacheFile.seek(dataOffset)) {
+    LOG_ERR("IMG", "Cache seek error at row %d", renderRowStart);
+    free(readBuffer);
+    cacheFile.close();
+    return false;
+  }
+
   int rowsInBuffer = 0;
   int bufferRow = 0;
-  for (int row = 0; row < cachedHeight; row++) {
+  for (int row = renderRowStart; row < renderRowEnd; row++) {
     if (bufferRow >= rowsInBuffer) {
-      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
+      const int toRead = (renderRowEnd - row < rowsPerRead) ? (renderRowEnd - row) : rowsPerRead;
       const size_t bytes = (size_t)toRead * bytesPerRow;
       if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
         LOG_ERR("IMG", "Cache read error at row %d", row);

@@ -13,6 +13,7 @@
 #include "CrossPointState.h"
 #include "FileBrowserActionActivity.h"
 #include "MappedInputManager.h"
+#include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -107,7 +108,11 @@ void SavedItemsHomeActivity::loop() {
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = CompactHeader::contentTop(metrics);
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int pageItems = std::max(1, contentHeight / metrics.listWithSubtitleRowHeight);
   const int listSize = static_cast<int>(books.size());
 
   buttonNavigator.onNextRelease([this, listSize] {
@@ -135,9 +140,9 @@ void SavedItemsHomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Notes and Bookmarks");
+  CompactHeader::drawTitle(renderer, "Notes and Bookmarks");
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop = CompactHeader::contentTop(metrics);
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (books.empty()) {

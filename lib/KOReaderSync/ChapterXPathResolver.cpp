@@ -198,9 +198,10 @@ class ParagraphTextCounter final : public Print {
   size_t visibleChars = 0;
 };
 
-class XPathParagraphResolver final : public Print {
+class XPathElementResolver final : public Print {
  public:
-  explicit XPathParagraphResolver(const int targetParagraph) : targetParagraph(targetParagraph) {
+  XPathElementResolver(const int targetElement, const char* targetTag)
+      : targetElement(targetElement), targetTag(targetTag) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
       LOG_ERR("KOX", "Failed to create XML parser");
@@ -208,10 +209,10 @@ class XPathParagraphResolver final : public Print {
     }
 
     XML_SetUserData(parser, this);
-    XML_SetElementHandler(parser, &XPathParagraphResolver::startElement, &XPathParagraphResolver::endElement);
+    XML_SetElementHandler(parser, &XPathElementResolver::startElement, &XPathElementResolver::endElement);
   }
 
-  ~XPathParagraphResolver() override { destroyXmlParser(parser); }
+  ~XPathElementResolver() override { destroyXmlParser(parser); }
 
   bool ok() const { return parser != nullptr && parseOk; }
 
@@ -252,12 +253,12 @@ class XPathParagraphResolver final : public Print {
 
  private:
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char**) {
-    auto* self = static_cast<XPathParagraphResolver*>(userData);
+    auto* self = static_cast<XPathElementResolver*>(userData);
     self->onStartElement(name);
   }
 
   static void XMLCALL endElement(void* userData, const XML_Char* name) {
-    auto* self = static_cast<XPathParagraphResolver*>(userData);
+    auto* self = static_cast<XPathElementResolver*>(userData);
     self->onEndElement(name);
   }
 
@@ -278,9 +279,9 @@ class XPathParagraphResolver final : public Print {
     path.push_back({name, siblingIndex});
     parentStates.emplace_back();
 
-    if (name == "p") {
-      paragraphCount++;
-      if (paragraphCount == targetParagraph) {
+    if (name == targetTag) {
+      elementCount++;
+      if (elementCount == targetElement) {
         xpath = buildParagraphXPath(spineIndex, path, 0, 0);
         stopped = true;
         XML_StopParser(parser, XML_FALSE);
@@ -314,13 +315,14 @@ class XPathParagraphResolver final : public Print {
   }
 
   XML_Parser parser = nullptr;
-  const int targetParagraph;
+  const int targetElement;
+  const char* targetTag;
   bool parseOk = true;
   bool insideBody = false;
   bool stopped = false;
   int depth = 0;
   int bodyDepth = -1;
-  int paragraphCount = 0;
+  int elementCount = 0;
   std::vector<ParentState> parentStates;
   std::vector<PathSegment> path;
   std::string xpath;
@@ -513,11 +515,10 @@ class XPathProgressResolver final : public Print {
   std::vector<PathSegment> path;
   std::string xpath;
 };
-}  // namespace
 
-std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex,
-                                                        const uint16_t paragraphIndex) {
-  if (!epub || paragraphIndex == 0 || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+std::string findXPathForElement(const std::shared_ptr<Epub>& epub, const int spineIndex, const uint16_t elementIndex,
+                                const char* tagName) {
+  if (!epub || elementIndex == 0 || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
     return "";
   }
 
@@ -526,7 +527,7 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
     return "";
   }
 
-  XPathParagraphResolver resolver(paragraphIndex);
+  XPathElementResolver resolver(elementIndex, tagName);
   if (!resolver.ok()) {
     return "";
   }
@@ -537,12 +538,23 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   }
 
   if (resolver.hasMatch()) {
-    LOG_DBG("KOX", "Resolved paragraph %u in spine %d -> %s", paragraphIndex, spineIndex, resolver.getXPath().c_str());
+    LOG_DBG("KOX", "Resolved %s %u in spine %d -> %s", tagName, elementIndex, spineIndex, resolver.getXPath().c_str());
     return resolver.getXPath();
   }
 
-  LOG_DBG("KOX", "Paragraph %u not found in spine %d", paragraphIndex, spineIndex);
+  LOG_DBG("KOX", "%s %u not found in spine %d", tagName, elementIndex, spineIndex);
   return "";
+}
+}  // namespace
+
+std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex,
+                                                        const uint16_t paragraphIndex) {
+  return findXPathForElement(epub, spineIndex, paragraphIndex, "p");
+}
+
+std::string ChapterXPathResolver::findXPathForListItem(const std::shared_ptr<Epub>& epub, const int spineIndex,
+                                                       const uint16_t listItemIndex) {
+  return findXPathForElement(epub, spineIndex, listItemIndex, "li");
 }
 
 std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,

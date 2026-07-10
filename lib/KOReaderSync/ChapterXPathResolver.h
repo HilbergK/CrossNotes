@@ -19,6 +19,13 @@ class ChapterXPathResolver {
   static std::string findXPathForParagraph(const std::shared_ptr<Epub>& epub, int spineIndex, uint16_t paragraphIndex);
 
   /**
+   * Resolve the Nth list item in a spine item to its real XHTML ancestry path.
+   *
+   * An empty string means parsing failed or the list item index was not found.
+   */
+  static std::string findXPathForListItem(const std::shared_ptr<Epub>& epub, int spineIndex, uint16_t listItemIndex);
+
+  /**
    * Resolve intra-spine progress to a real XHTML ancestry path plus text offset.
    *
    * Returns a KOReader-compatible path like:

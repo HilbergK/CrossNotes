@@ -213,30 +213,18 @@ void ReaderOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
   if (currentIndex >= optionCount) currentIndex = 0;
 
   const SettingInfo selectedSetting = setting;
-  startActivityForResult(
-      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "ReaderOptionsOptionSelect", setting.nameId,
-                                                std::move(options), currentIndex, true),
-      [this, selectedSetting](const ActivityResult& result) {
-        if (result.isCancelled) {
-          requestUpdate();
-          return;
-        }
+  optionPopup.show(setting.nameId, options, currentIndex, [this, selectedSetting](int selectedIndex) {
+    if (selectedSetting.valuePtr != nullptr) {
+      SETTINGS.*(selectedSetting.valuePtr) =
+          enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(selectedIndex));
+    } else if (selectedSetting.valueSetter) {
+      selectedSetting.valueSetter(static_cast<uint8_t>(selectedIndex));
+    }
 
-        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
-        if (selection == nullptr) {
-          requestUpdate();
-          return;
-        }
-
-        if (selectedSetting.valuePtr != nullptr) {
-          SETTINGS.*(selectedSetting.valuePtr) = enumRawValueForDisplayIndex(selectedSetting, selection->index);
-        } else if (selectedSetting.valueSetter) {
-          selectedSetting.valueSetter(selection->index);
-        }
-
-        persistReaderSettings();
-        requestUpdate();
-      });
+    persistReaderSettings();
+    requestUpdate();
+  });
+  requestUpdate();
 }
 
 void ReaderOptionsActivity::openScreenMarginPicker(const SettingInfo& setting) {
@@ -369,9 +357,9 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
 void ReaderOptionsActivity::openLineHeightPicker() {
   startActivityForResult(
       std::make_unique<IntervalSelectionActivity>(
-          renderer, mappedInput, "ReaderOptionsLineHeightInterval", StrId::STR_LINE_SPACING,
-          StrId::STR_PERCENT_STEP_HINT, SETTINGS.lineHeightPercent, CrossPointSettings::MIN_LINE_HEIGHT_PERCENT,
-          CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10, StrId::STR_NONE_OPT, /*readerActivity=*/true,
+          renderer, mappedInput, "ReaderOptionsLineHeightInterval", StrId::STR_LINE_SPACING, SETTINGS.lineHeightPercent,
+          CrossPointSettings::MIN_LINE_HEIGHT_PERCENT, CrossPointSettings::MAX_LINE_HEIGHT_PERCENT, 1, 10,
+          StrId::STR_NONE_OPT, /*readerActivity=*/true,
           /*allowPowerAsConfirm=*/true, /*ignoreInitialConfirmRelease=*/false, /*showPercentValue=*/true),
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
@@ -384,6 +372,8 @@ void ReaderOptionsActivity::openLineHeightPicker() {
 }
 
 void ReaderOptionsActivity::loop() {
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   buttonNavigator.onNextRelease([this] {
     moveSelection(true);
     requestUpdate();
@@ -416,6 +406,8 @@ void ReaderOptionsActivity::loop() {
 }
 
 void ReaderOptionsActivity::render(RenderLock&&) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

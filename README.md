@@ -67,7 +67,7 @@ To build from source:
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
-pio run -e tiny    # or teensy / xlarge
+pio run -e tiny    # or xlarge
 ```
 
 ## Credits

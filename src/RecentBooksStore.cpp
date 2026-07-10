@@ -3,23 +3,50 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
-#include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <Serialization.h>
 #include <Xtc.h>
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace {
 constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
 constexpr char RECENT_BOOKS_FILE_BIN[] = "/.crosspoint/recent.bin";
-constexpr char RECENT_BOOKS_FILE_JSON[] = "/.crosspoint/recent.json";
 constexpr char RECENT_BOOKS_FILE_BAK[] = "/.crosspoint/recent.bin.bak";
-constexpr int MAX_RECENT_BOOKS = 18;
 }  // namespace
 
-RecentBooksStore RecentBooksStore::instance;
+void RecentBooksStore::toJson(JsonDocument& doc) const {
+  JsonArray arr = doc["books"].to<JsonArray>();
+  for (const auto& book : recentBooks) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["path"] = book.path;
+    obj["title"] = book.title;
+    obj["author"] = book.author;
+    obj["coverBmpPath"] = book.coverBmpPath;
+  }
+}
+
+bool RecentBooksStore::fromJson(JsonVariantConst doc) {
+  // Tolerate a missing/invalid 'books' key (treat as empty list); only a
+  // JSON parse error is fatal. A null JsonArray iterates zero times.
+  recentBooks.clear();
+  JsonArrayConst arr = doc["books"].as<JsonArrayConst>();
+  recentBooks.reserve(std::min(arr.size(), static_cast<size_t>(MAX_RECENT_BOOKS)));
+  for (JsonObjectConst obj : arr) {
+    if (getCount() >= MAX_RECENT_BOOKS) break;
+    RecentBook book;
+    book.path = obj["path"] | "";
+    book.title = obj["title"] | "";
+    book.author = obj["author"] | "";
+    book.coverBmpPath = obj["coverBmpPath"] | "";
+    recentBooks.push_back(book);
+  }
+
+  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", getCount());
+  return true;
+}
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& coverBmpPath) {
@@ -102,11 +129,6 @@ bool RecentBooksStore::pruneMissing() {
   return recentBooks.size() != before;
 }
 
-bool RecentBooksStore::saveToFile() const {
-  Storage.mkdir("/.crosspoint");
-  return JsonSettingsIO::saveRecentBooks(*this, RECENT_BOOKS_FILE_JSON);
-}
-
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   std::string lastBookFileName = "";
   const size_t lastSlash = path.find_last_of('/');
@@ -136,15 +158,14 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 }
 
 bool RecentBooksStore::loadFromFile() {
-  // Try JSON first
-  if (Storage.exists(RECENT_BOOKS_FILE_JSON)) {
-    String json = Storage.readFile(RECENT_BOOKS_FILE_JSON);
-    if (!json.isEmpty()) {
-      return JsonSettingsIO::loadRecentBooks(*this, json.c_str());
-    }
+  const bool hasStoreFile = Storage.exists(getFilePath());
+  if (PersistableStore<RecentBooksStore>::loadFromFile()) {
+    return true;
+  }
+  if (hasStoreFile) {
+    return false;
   }
 
-  // Fall back to binary migration
   if (Storage.exists(RECENT_BOOKS_FILE_BIN)) {
     if (loadFromBinaryFile()) {
       saveToFile();
@@ -187,7 +208,7 @@ bool RecentBooksStore::loadFromBinaryFile() {
         recentBooks.push_back(book);
       }
     }
-  } else if (version == 3) {
+  } else if (version == RECENT_BOOKS_FILE_VERSION) {
     uint8_t count;
     serialization::readPod(inputFile, count);
 

@@ -9,6 +9,7 @@
 #include "ControlsOptionsActivity.h"
 #include "ReaderOptionsActivity.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 struct Rect;
@@ -26,6 +27,7 @@ class EpubReaderMenuActivity final : public Activity {
     DISPLAY_QR,
     GO_HOME,
     SYNC,
+    NEARBY_POSITION_SYNC,
     DELETE_STATS,
     DELETE_CACHE,
     RESET_READING_PACE,
@@ -91,6 +93,7 @@ class EpubReaderMenuActivity final : public Activity {
   MenuTab activeTab = MenuTab::Main;
 
   ButtonNavigator buttonNavigator;
+  OptionPopup optionPopup;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,

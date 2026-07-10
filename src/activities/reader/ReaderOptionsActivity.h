@@ -5,6 +5,7 @@
 
 #include "../Activity.h"
 #include "../settings/SettingsActivity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 class ReaderOptionsActivity final : public Activity {
@@ -22,6 +23,7 @@ class ReaderOptionsActivity final : public Activity {
   std::vector<SettingInfo> pageLayoutSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
   SettingAction activeSubmenu = SettingAction::None;
+  OptionPopup optionPopup;
   SaveSettingsCallback saveSettingsCallback = nullptr;
   void* saveSettingsContext = nullptr;
   SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr;

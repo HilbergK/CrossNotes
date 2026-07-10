@@ -321,7 +321,7 @@ bool clearBookCachePreservingUserState(const std::string& path) {
   }
 
   std::vector<ResolvedPreservedCacheFile> resolvedFiles;
-  const bool includeStatsFiles = FsHelpers::hasEpubExtension(path);
+  const bool includeStatsFiles = FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path);
   if (!resolvePreservedFiles(cachePath, preservedFiles, preservedCount, includeStatsFiles, "upload_preserve_",
                              resolvedFiles)) {
     return false;

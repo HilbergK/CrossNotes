@@ -23,9 +23,9 @@
 #include "activities/reader/EpubReaderActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
+#include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "components/icons/book.h"
-#include "components/themes/lyra/LyraTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -34,28 +34,6 @@ constexpr int kGridColumns = 3;
 constexpr unsigned long kLongPressMs = 1000;
 constexpr float kCircleRadians = 6.2831853f;
 constexpr float kCircleRadiansPerPercent = kCircleRadians / 100.0f;
-constexpr int kLyraGridContentTop =
-    LyraMetrics::values.topPadding + LyraMetrics::values.headerHeight + LyraMetrics::values.verticalSpacing;
-constexpr int kLyraGridSpacing = LyraMetrics::values.verticalSpacing;
-
-void drawGridHeader(const GfxRenderer& renderer, const int pageWidth) {
-  const Rect rect{0, LyraMetrics::values.topPadding, pageWidth, LyraMetrics::values.headerHeight};
-  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
-
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  const int batteryX = rect.x + rect.width - 12 - LyraMetrics::values.batteryWidth;
-  GUI.drawBatteryRight(renderer,
-                       Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
-                       showBatteryPercentage);
-
-  const int titleMaxWidth = rect.width - LyraMetrics::values.contentSidePadding * 3;
-  const std::string title =
-      renderer.truncatedText(UI_12_FONT_ID, tr(STR_MENU_RECENT_BOOKS), titleMaxWidth, EpdFontFamily::BOLD);
-  renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
-                    rect.y + LyraMetrics::values.batteryBarHeight + 3, title.c_str(), true, EpdFontFamily::BOLD);
-  renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
-}
 
 void drawInlineProgressCircle(const GfxRenderer& renderer, const int x, const int y, const int size,
                               const float progressPercent) {
@@ -209,7 +187,7 @@ std::string getReusableCoverPath(const RecentBook& book) {
 }
 
 void ensureReusableCoverPath(RecentBook& book) {
-  if (book.coverBmpPath.empty() || hasThumbnailPlaceholder(book.coverBmpPath)) {
+  if (hasThumbnailPlaceholder(book.coverBmpPath)) {
     return;
   }
 
@@ -279,13 +257,13 @@ void RecentBooksGridActivity::loadPageCovers(int pageStart) {
     if (needsCoverThumbGeneration(book, coverPath)) {
       if (FsHelpers::hasEpubExtension(book.path)) {
         Epub epub(book.path, "/.crosspoint");
-        if (epub.load(false, true)) {
+        if (epub.load(true, true)) {
           if (!showingLoading) {
             showingLoading = true;
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + (processedCount * 90) / totalToProcess);
-          if (epub.generateThumbBmp(COVER_WIDTH, COVER_HEIGHT)) {
+          if (epub.generateThumbBmp(COVER_WIDTH, COVER_HEIGHT, &renderer, SETTINGS.getReaderFontId())) {
             const std::string reusablePath = epub.getThumbBmpPath();
             book.coverBmpPath = reusablePath;
             updateRecentBookCoverPath(book, reusablePath);
@@ -525,7 +503,7 @@ void RecentBooksGridActivity::showBookActionMenu(const int bookIndex, const bool
             return;
           case FileBrowserAction::ToggleCompleted: {
             bool completed = false;
-            if (BookActions::toggleEpubCompleted(book.path, book.title, completed)) {
+            if (BookActions::toggleBookCompleted(book.path, book.title, completed)) {
               BookActions::drawToast(renderer, completed ? tr(STR_MARKED_FINISHED) : tr(STR_MARKED_UNFINISHED));
               delay(1000);
             }
@@ -575,16 +553,16 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  drawGridHeader(renderer, pageWidth);
-  constexpr int contentTop = kLyraGridContentTop;
+  CompactHeader::drawTitle(renderer, tr(STR_MENU_RECENT_BOOKS));
+  const int contentTop = CompactHeader::contentTop(metrics);
   constexpr int titleStripHeight = 32;
-  constexpr int titleGridGap = 16;
+  constexpr int titleGridGap = 8;
   constexpr int selectionPadding = 4;
   constexpr int selectionOutlineGap = 2;
   constexpr int selectionOuterInset = selectionPadding + selectionOutlineGap;
-  constexpr int gridSpacing = kLyraGridSpacing;
-  constexpr int rowSpacing = gridSpacing + 4;
-  constexpr int totalGridWidth = kGridColumns * COVER_WIDTH + (kGridColumns - 1) * gridSpacing;
+  const int gridSpacing = metrics.verticalSpacing;
+  const int rowSpacing = gridSpacing + 4;
+  const int totalGridWidth = kGridColumns * COVER_WIDTH + (kGridColumns - 1) * gridSpacing;
   const int startXOffset = (pageWidth - totalGridWidth) / 2;
 
   const int totalBooks = static_cast<int>(recentBooks.size());
@@ -598,7 +576,12 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   } else {
     if (selectorIndex >= 0 && selectorIndex < static_cast<int>(recentBooks.size())) {
       const int titleLh = renderer.getLineHeight(UI_10_FONT_ID);
-      const int titleY = contentTop + (titleStripHeight - titleLh) / 2;
+      // Center the title/progress row in the lane between the header bottom and the
+      // grid top, rather than only within titleStripHeight, so it stays vertically
+      // centered after the grid was nudged up.
+      const int headerBottomY = CompactHeader::headerBottomY(metrics);
+      const int gridTopY = contentTop + titleStripHeight + titleGridGap;
+      const int titleY = headerBottomY + (gridTopY - headerBottomY - titleLh) / 2;
       const auto& selectedBook = recentBooks[selectorIndex];
       const bool hasProgress = selectedBook.progressLoaded && RecentBookProgress::hasPercent(selectedBook.progress);
       const std::string progressLabel = hasProgress ? RecentBookProgress::formatPercent(selectedBook.progress) : "";

@@ -9,7 +9,9 @@
 #   name:        Output family name (used in filenames and on-device UI)
 #   description: Human-readable description (shown in download UI and manifest)
 #   languages:   Human-readable supported scripts/languages (shown as a separate UI line)
-#   intervals:   Comma-separated Unicode interval presets for fontconvert_sdcard.py
+#   intervals:   Comma-separated extra Unicode interval presets for fontconvert_sdcard.py.
+#                build-sd-fonts.py always adds the "builtin" preset so SD fonts
+#                request the same core ranges as built-in reader fonts.
 #   sizes:       Point sizes to generate
 #   force_autohint: (optional) Force FreeType auto-hinter instead of native hinting
 #   styles:      Map of style name -> font source
@@ -40,10 +42,26 @@ families:
     intervals: latin-ext,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf", variable: {wght: 500}}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf", variable: {wght: 700}}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf", variable: {wght: 500}}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf", variable: {wght: 700}}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf",
+          variable: { wght: 500 },
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf",
+          variable: { wght: 500 },
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
 
   - name: ChareInk
     description: "E-ink optimized serif for comfortable reading"
@@ -51,10 +69,15 @@ families:
     intervals: latin-ext,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-BoldItalic.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Bold.ttf" }
+      italic:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Italic.ttf" }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-BoldItalic.ttf",
+        }
 
   - name: GentiumBookPlus
     description: "Scholarly serif with wide Unicode coverage"
@@ -62,10 +85,15 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-BoldItalic.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Bold.ttf" }
+      italic:
+        { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Italic.ttf" }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-BoldItalic.ttf",
+        }
 
   - name: IBMPlexSerif
     description: "Professional serif"
@@ -73,10 +101,11 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-BoldItalic.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Italic.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-BoldItalic.ttf" }
 
   - name: Literata
     description: "Screen-optimized serif"
@@ -84,10 +113,11 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf" }
 
   - name: Lora
     description: "Calligraphic serif for literary reading"
@@ -95,10 +125,11 @@ families:
     intervals: latin-ext,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-BoldItalic.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Italic.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-BoldItalic.ttf" }
 
   - name: Merriweather
     description: "Warm serif for long-form reading"
@@ -106,10 +137,15 @@ families:
     intervals: latin-ext,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-BoldItalic.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Bold.ttf" }
+      italic:
+        { url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Italic.ttf" }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-BoldItalic.ttf",
+        }
 
   - name: NotoSerifExtended
     description: "Serif"
@@ -117,10 +153,22 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-BoldItalic.ttf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Regular.ttf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Bold.ttf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Italic.ttf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-BoldItalic.ttf",
+        }
 
   - name: SourceSerif4
     description: "Adobe transitional serif"
@@ -128,10 +176,12 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-It.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-BoldIt.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-It.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-BoldIt.ttf" }
 
   - name: Tinos
     description: "Refreshing serif font with improved on-screen readability"
@@ -139,10 +189,10 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-BoldItalic.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Italic.ttf" }
+      bolditalic: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-BoldItalic.ttf" }
 
   - name: Domitian
     description: "A humanist serif for literary reading"
@@ -150,22 +200,60 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Roman.otf"}
-      bold:       {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Bold.otf"}
-      italic:     {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Italic.otf"}
-      bolditalic: {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-BoldItalic.otf"}
+      regular: { url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Roman.otf" }
+      bold: { url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Bold.otf" }
+      italic: { url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Italic.otf" }
+      bolditalic: { url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-BoldItalic.otf" }
 
   - name: LibreBaskerville
-    description: "A serif reimplementing the classic Baskerville (Latin)"
+    description: "A serif reimplementing the classic Baskerville"
     languages: "Latin"
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-BoldItalic.ttf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Regular.ttf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Bold.ttf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Italic.ttf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-BoldItalic.ttf",
+        }
 
+  - name: Vollkorn
+    description: "A serif for bread and butter use by Friedrich Althausen"
+    languages: "Latin, Greek, Cyrillic"
+    intervals: latin-ext,greek,cyrillic
+    sizes: [8, 9, 10, 12, 14, 16, 18, 20]
+    styles:
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf",
+          variable: { wght: 400 },
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf",
+          variable: { wght: 400 },
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
 
   # ── Sans-serif ─────────────────────────────────────────────────────────
 
@@ -175,10 +263,26 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf", variable: {wght: 400}}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf", variable: {wght: 700}}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya-Italic%5Bwght%5D.ttf", variable: {wght: 400}}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya-Italic%5Bwght%5D.ttf", variable: {wght: 700}}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf",
+          variable: { wght: 400 },
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya-Italic%5Bwght%5D.ttf",
+          variable: { wght: 400 },
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya-Italic%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
 
   - name: IBMPlexSans
     description: "IBM corporate sans-serif"
@@ -186,10 +290,22 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-BoldItalic.ttf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Bold.ttf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Italic.ttf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-BoldItalic.ttf",
+        }
 
   - name: Inter
     description: "Modern sans-serif"
@@ -197,10 +313,26 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf", variable: {wght: 400, opsz: 14}}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf", variable: {wght: 700, opsz: 14}}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf", variable: {wght: 400, opsz: 14}}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf", variable: {wght: 700, opsz: 14}}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+          variable: { wght: 400, opsz: 14 },
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+          variable: { wght: 700, opsz: 14 },
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf",
+          variable: { wght: 400, opsz: 14 },
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf",
+          variable: { wght: 700, opsz: 14 },
+        }
 
   - name: Lexend Deca
     description: "Friendly sans-serif for clear reading"
@@ -208,10 +340,23 @@ families:
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf", variable: {wght: 400}}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf", variable: {wght: 700}}
-      italic:     {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/LexendDeca/LexendDeca-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf", variable: {wght: 700}}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf",
+          variable: { wght: 400 },
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
+      italic:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/LexendDeca/LexendDeca-Italic.ttf" }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/google/fonts/main/ofl/lexenddeca/LexendDeca%5Bwght%5D.ttf",
+          variable: { wght: 700 },
+        }
 
   - name: NotoSansExtended
     description: "Sans-serif"
@@ -219,10 +364,13 @@ families:
     intervals: latin-ext,greek,cyrillic,georgian,armenian,ethiopic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-BoldItalic.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Bold.ttf" }
+      italic:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-Italic.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/NotoSans/NotoSans-BoldItalic.ttf" }
 
   - name: SourceSans3
     description: "Adobe humanist sans-serif"
@@ -230,10 +378,11 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-It.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-BoldIt.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-It.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-BoldIt.ttf" }
 
   # ── Monospace ──────────────────────────────────────────────────────────
 
@@ -243,10 +392,11 @@ families:
     intervals: latin-ext,greek,cyrillic
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-BoldItalic.ttf"}
+      regular: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Italic.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-BoldItalic.ttf" }
 
   - name: SourceCodePro
     description: "Adobe monospace with excellent hinting"
@@ -254,10 +404,12 @@ families:
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-It.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-BoldIt.ttf"}
+      regular:
+        { url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Regular.ttf" }
+      bold: { url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Bold.ttf" }
+      italic: { url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-It.ttf" }
+      bolditalic:
+        { url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-BoldIt.ttf" }
 
   # ── Dyslexia ───────────────────────────────────────────────────────────────
 
@@ -266,10 +418,22 @@ families:
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Regular.otf"}
-      bold:       {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Bold.otf"}
-      italic:     {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Italic.otf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-BoldItalic.otf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Regular.otf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Bold.otf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-Italic.otf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/OpenDyslexic/OpenDyslexic-BoldItalic.otf",
+        }
 
   # ── Accessibility ──────────────────────────────────────────────────────
 
@@ -279,10 +443,22 @@ families:
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-BoldItalic.ttf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Bold.ttf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Italic.ttf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-BoldItalic.ttf",
+        }
 
   - name: LexicaUltralegible
     description: "Accessibility font for low vision / dyslexia"
@@ -290,7 +466,19 @@ families:
     intervals: latin-ext
     sizes: [8, 9, 10, 12, 14, 16, 18, 20]
     styles:
-      regular:    {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
+      regular:
+        {
+          url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Regular.ttf",
+        }
+      bold:
+        {
+          url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf",
+        }
+      italic:
+        {
+          url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf",
+        }
+      bolditalic:
+        {
+          url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf",
+        }

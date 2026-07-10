@@ -14,6 +14,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <ScratchWorkspace.h>
 #include <builtinFonts/all.h>
 
 #ifdef SIMULATOR
@@ -81,6 +82,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/UsbSerialFileTransfer.h"
 #ifdef SIMULATOR
 #include "simulator/SimulatorSmokeTest.h"
 #endif
@@ -104,68 +106,6 @@ EpdFont lexenddeca14ItalicFont(&lexenddeca_14_italic);
 EpdFont lexenddeca14BoldItalicFont(&lexenddeca_14_bolditalic);
 EpdFontFamily lexenddeca14FontFamily(&lexenddeca14RegularFont, &lexenddeca14BoldFont, &lexenddeca14ItalicFont,
                                      &lexenddeca14BoldItalicFont);
-#endif
-#ifndef OMIT_TEENSY_FONT
-EpdFont charein8RegularFont(&charein_8_regular);
-EpdFont charein8BoldFont(&charein_8_bold);
-EpdFont charein8ItalicFont(&charein_8_italic);
-EpdFont charein8BoldItalicFont(&charein_8_bolditalic);
-EpdFontFamily charein8FontFamily(&charein8RegularFont, &charein8BoldFont, &charein8ItalicFont, &charein8BoldItalicFont);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-EpdFont charein9RegularFont(&charein_9_regular);
-EpdFont charein9BoldFont(&charein_9_bold);
-EpdFont charein9ItalicFont(&charein_9_italic);
-EpdFont charein9BoldItalicFont(&charein_9_bolditalic);
-EpdFontFamily charein9FontFamily(&charein9RegularFont, &charein9BoldFont, &charein9ItalicFont, &charein9BoldItalicFont);
-#endif
-#ifndef OMIT_TINY_FONT
-EpdFont charein10RegularFont(&charein_10_regular);
-EpdFont charein10BoldFont(&charein_10_bold);
-EpdFont charein10ItalicFont(&charein_10_italic);
-EpdFont charein10BoldItalicFont(&charein_10_bolditalic);
-EpdFontFamily charein10FontFamily(&charein10RegularFont, &charein10BoldFont, &charein10ItalicFont,
-                                  &charein10BoldItalicFont);
-#endif
-#ifndef OMIT_SMALL_FONT
-EpdFont charein12RegularFont(&charein_12_regular);
-EpdFont charein12BoldFont(&charein_12_bold);
-EpdFont charein12ItalicFont(&charein_12_italic);
-EpdFont charein12BoldItalicFont(&charein_12_bolditalic);
-EpdFontFamily charein12FontFamily(&charein12RegularFont, &charein12BoldFont, &charein12ItalicFont,
-                                  &charein12BoldItalicFont);
-#endif
-#ifndef OMIT_MEDIUM_FONT
-EpdFont charein14RegularFont(&charein_14_regular);
-EpdFont charein14BoldFont(&charein_14_bold);
-EpdFont charein14ItalicFont(&charein_14_italic);
-EpdFont charein14BoldItalicFont(&charein_14_bolditalic);
-EpdFontFamily charein14FontFamily(&charein14RegularFont, &charein14BoldFont, &charein14ItalicFont,
-                                  &charein14BoldItalicFont);
-#endif
-#ifndef OMIT_LARGE_FONT
-EpdFont charein16RegularFont(&charein_16_regular);
-EpdFont charein16BoldFont(&charein_16_bold);
-EpdFont charein16ItalicFont(&charein_16_italic);
-EpdFont charein16BoldItalicFont(&charein_16_bolditalic);
-EpdFontFamily charein16FontFamily(&charein16RegularFont, &charein16BoldFont, &charein16ItalicFont,
-                                  &charein16BoldItalicFont);
-#endif
-#ifndef OMIT_XLARGE_FONT
-EpdFont charein18RegularFont(&charein_18_regular);
-EpdFont charein18BoldFont(&charein_18_bold);
-EpdFont charein18ItalicFont(&charein_18_italic);
-EpdFont charein18BoldItalicFont(&charein_18_bolditalic);
-EpdFontFamily charein18FontFamily(&charein18RegularFont, &charein18BoldFont, &charein18ItalicFont,
-                                  &charein18BoldItalicFont);
-#endif
-#ifndef OMIT_HUGE_FONT
-EpdFont charein20RegularFont(&charein_20_regular);
-EpdFont charein20BoldFont(&charein_20_bold);
-EpdFont charein20ItalicFont(&charein_20_italic);
-EpdFont charein20BoldItalicFont(&charein_20_bolditalic);
-EpdFontFamily charein20FontFamily(&charein20RegularFont, &charein20BoldFont, &charein20ItalicFont,
-                                  &charein20BoldItalicFont);
 #endif
 #ifndef OMIT_TEENSY_FONT
 EpdFont lexenddeca8RegularFont(&lexenddeca_8_regular);
@@ -670,6 +610,9 @@ void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
 #endif
   renderer.begin();
+  if (!ScratchWorkspace::initialize()) {
+    LOG_ERR("MAIN", "Scratch workspace init failed");
+  }
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
 
@@ -679,31 +622,6 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-
-#ifndef OMIT_TEENSY_FONT
-  renderer.insertFont(CHAREINK_8_FONT_ID, charein8FontFamily);
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-  renderer.insertFont(CHAREINK_9_FONT_ID, charein9FontFamily);
-#endif
-#ifndef OMIT_TINY_FONT
-  renderer.insertFont(CHAREINK_10_FONT_ID, charein10FontFamily);
-#endif
-#ifndef OMIT_SMALL_FONT
-  renderer.insertFont(CHAREINK_12_FONT_ID, charein12FontFamily);
-#endif
-#ifndef OMIT_MEDIUM_FONT
-  renderer.insertFont(CHAREINK_14_FONT_ID, charein14FontFamily);
-#endif
-#ifndef OMIT_LARGE_FONT
-  renderer.insertFont(CHAREINK_16_FONT_ID, charein16FontFamily);
-#endif
-#ifndef OMIT_XLARGE_FONT
-  renderer.insertFont(CHAREINK_18_FONT_ID, charein18FontFamily);
-#endif
-#ifndef OMIT_HUGE_FONT
-  renderer.insertFont(CHAREINK_20_FONT_ID, charein20FontFamily);
-#endif
 
 #ifndef OMIT_TEENSY_FONT
   renderer.insertFont(LEXENDDECA_8_FONT_ID, lexenddeca8FontFamily);
@@ -777,6 +695,11 @@ void setup() {
   // and the host has to be physically replugged for logs to flow. Warm reboot
   // worked without the delay because USB was already enumerated.
   delay(250);
+  // Web Serial sends file data in 256-byte chunks and waits for a 1-byte ACK.
+  // HWCDC defaults to a 256-byte RX queue, which is fine for logs but too small
+  // for chunked file transfer.
+  logSerial.setRxBufferSize(1024);
+  logSerial.setTxBufferSize(1024);
   Serial.begin(115200);
 #ifndef SIMULATOR
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
@@ -982,21 +905,13 @@ void loop() {
     lastMemPrint = millis();
   }
 
-  // Handle incoming serial commands,
-  // nb: we use logSerial from logging to avoid deprecation warnings
-  if (logSerial.available() > 0) {
-    String line = logSerial.readStringUntil('\n');
-    if (line.startsWith("CMD:")) {
-      String cmd = line.substring(4);
-      cmd.trim();
-      if (cmd == "SCREENSHOT") {
-        const uint32_t bufferSize = display.getBufferSize();
-        logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
-        uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, bufferSize);
-        logSerial.printf("SCREENSHOT_END\n");
-      }
-    }
+  if (UsbSerialFileTransfer::process(activityManager.isHomeActivity()) ==
+      UsbSerialFileTransfer::ProcessResult::ScreenshotRequested) {
+    const uint32_t bufferSize = display.getBufferSize();
+    logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
+    uint8_t* buf = display.getFrameBuffer();
+    logSerial.write(buf, bufferSize);
+    logSerial.printf("SCREENSHOT_END\n");
   }
 
   // Check for any user activity (button press or release) or active background work

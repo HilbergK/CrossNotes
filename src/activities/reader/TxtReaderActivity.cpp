@@ -388,7 +388,7 @@ void TxtReaderActivity::initializeReader() {
   const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
   if (topStatusBarReservedHeight > 0) {
     cachedOrientedMarginTop += std::max(static_cast<int>(cachedScreenMargin),
-                                        topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
+                                        topStatusBarReservedHeight + ReaderUtils::TOP_CLOCK_TEXT_PADDING);
   } else {
     cachedOrientedMarginTop += cachedScreenMargin;
   }
@@ -807,7 +807,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
   if (topStatusBarReservedHeight > 0) {
     marginTop +=
-        std::max(static_cast<int>(screenMargin), topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
+        std::max(static_cast<int>(screenMargin), topStatusBarReservedHeight + ReaderUtils::TOP_CLOCK_TEXT_PADDING);
   } else {
     marginTop += screenMargin;
   }

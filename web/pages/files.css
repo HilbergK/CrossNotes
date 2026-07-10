@@ -111,6 +111,27 @@ h2 {
 .modal.picker-mode {
       max-width: 920px;
     }
+.modal.image-preview-mode {
+      max-width: 640px;
+    }
+.image-preview-stage {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      margin-bottom: 15px;
+      border-radius: 6px;
+    }
+.image-preview-stage img {
+      max-width: 100%;
+      max-height: 65vh;
+      object-fit: contain;
+    }
+#imagePreviewDownload {
+      display: inline-block;
+      width: auto;
+      text-decoration: none;
+    }
 .picker-columns.picker-active {
       display: flex;
       flex-direction: row;
@@ -582,6 +603,46 @@ h2 {
       color: var(--label-color);
       margin-top: 4px;
       line-height: 1.3;
+    }
+.reference-characters-row .setting-label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+.reference-characters-row .setting-controls {
+      flex: 0 0 auto;
+    }
+.reference-characters-row .setting-desc {
+      overflow-wrap: anywhere;
+    }
+.reference-characters-input {
+      width: 72px;
+      height: 28px;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--border-color);
+      color: var(--title-color);
+      font-size: 0.8em;
+      font-weight: 600;
+      text-align: center;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+      -moz-appearance: textfield;
+    }
+.reference-characters-input::-webkit-outer-spin-button,
+.reference-characters-input::-webkit-inner-spin-button {
+      margin: 0;
+      -webkit-appearance: none;
+    }
+.reference-characters-input:hover {
+      background: var(--accent-color-10);
+      border-color: var(--accent-color);
+    }
+.reference-characters-input:focus {
+      outline: none;
+      background: var(--card-bg);
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px var(--accent-color-10);
     }
 /* Rotation Buttons */
     .rotation-buttons {

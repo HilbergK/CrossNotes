@@ -113,7 +113,12 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
 
 void FontDownloadActivity::onEnter() {
   Activity::onEnter();
-  sdFontSystem.releaseLoadedFont(renderer);
+  // Free the whole SD font registry, not just the active glyph font, before the
+  // network + manifest work. With many families installed the registry, the
+  // parsed manifest, and the families_ list would otherwise all be resident at
+  // once and exhaust the heap, aborting during manifest parse. Matches the
+  // pre-network release done by the KOReader sync/auth activities.
+  sdFontSystem.releaseForNetwork(renderer);
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
@@ -144,6 +149,10 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   if (!fetchAndParseManifest()) {
+    if (cancelRequested_) {
+      finishAfterBackPress();
+      return;
+    }
     {
       RenderLock lock(*this);
       state_ = ERROR;
@@ -167,6 +176,28 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_.clear();
   clearManifestFamilies();
+  cancelRequested_ = false;
+
+  // Poll the Cancel (Back) button while the manifest downloads so a slow or
+  // failing network can be backed out of. HttpDownloader checks shouldCancel on
+  // every read-loop iteration, and we re-check it between retry attempts so the
+  // retry delays do not swallow the press.
+  HttpDownloader::DownloadOptions manifestOptions;
+  manifestOptions.shouldCancel = [this]() {
+    if (cancelRequested_) {
+      return true;
+    }
+    mappedInput.update();
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      cancelRequested_ = true;
+    }
+    return cancelRequested_;
+  };
+  // The font list is fetched again after individual updates. Release registry
+  // memory on every manifest load, not only when entering Manage Fonts.
+  sdFontSystem.releaseForNetwork(renderer);
 
   Storage.remove(MANIFEST_TMP);
   HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
@@ -175,15 +206,24 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       LOG_DBG("FONT", "Retrying font manifest download (%d/%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS);
       delay(FONT_DOWNLOAD_RETRY_DELAY_MS);
     }
-    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP);
-    if (result == HttpDownloader::OK) break;
+    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr, &cancelRequested_, "", "",
+                                            manifestOptions);
+    if (result == HttpDownloader::OK || result == HttpDownloader::ABORTED) break;
+    if (manifestOptions.shouldCancel()) {
+      result = HttpDownloader::ABORTED;
+      break;
+    }
     LOG_ERR("FONT", "Font manifest download attempt failed (%d/%d, error=%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS,
             result);
   }
   if (result != HttpDownloader::OK) {
+    Storage.remove(MANIFEST_TMP);
+    if (result == HttpDownloader::ABORTED) {
+      LOG_INF("FONT", "Font list loading cancelled");
+      return false;
+    }
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
     errorMessage_ = "Failed to fetch font list";
-    Storage.remove(MANIFEST_TMP);
     return false;
   }
 
@@ -196,74 +236,93 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestFile);
-  manifestFile.close();
-  Storage.remove(MANIFEST_TMP);
+  // The parsed manifest and the installed-font registry are each large when many
+  // families are installed. Keep the JsonDocument in its own scope and defer
+  // loading the registry until after it is freed (see second pass below), so the
+  // two are never resident at the same time. Their coexistence here is what
+  // aborted during parse on low-heap devices with many SD fonts installed.
+  {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, manifestFile);
+    manifestFile.close();
+    Storage.remove(MANIFEST_TMP);
 
-  if (err) {
-    LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
-    errorMessage_ = "Invalid font manifest";
-    return false;
-  }
-
-  int version = doc["version"] | 0;
-  if (version != FONTS_MANIFEST_VERSION) {
-    LOG_ERR("FONT", "Unsupported manifest version: %d", version);
-    errorMessage_ = "Unsupported manifest version";
-    return false;
-  }
-
-  baseUrl_ = doc["baseUrl"] | "";
-  families_.clear();
-  fontInstaller_.refreshRegistry();
-
-  JsonArray familiesArr = doc["families"].as<JsonArray>();
-  families_.reserve(familiesArr.size());
-
-  for (JsonObject fObj : familiesArr) {
-    ManifestFamily family;
-    family.name = fObj["name"] | "";
-    family.description = fObj["description"] | "";
-    family.languages = fObj["languages"] | "";
-
-    for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
-      family.styles.push_back(s.as<std::string>());
+    if (err) {
+      LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
+      errorMessage_ = "Invalid font manifest";
+      return false;
     }
 
-    family.totalSize = 0;
-    for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
-      ManifestFile file;
-      file.name = fileObj["name"] | "";
-      file.size = fileObj["size"] | 0;
-      if (!parseManifestPointSize(file.name.c_str(), file.pointSize)) {
-        LOG_ERR("FONT", "Malformed manifest file entry: invalid filename %s", file.name.c_str());
-        errorMessage_ = "Invalid font manifest";
-        return false;
+    int version = doc["version"] | 0;
+    if (version != FONTS_MANIFEST_VERSION) {
+      LOG_ERR("FONT", "Unsupported manifest version: %d", version);
+      errorMessage_ = "Unsupported manifest version";
+      return false;
+    }
+
+    baseUrl_ = doc["baseUrl"] | "";
+    families_.clear();
+
+    std::vector<ManifestFamily> parsedFamilies;
+    JsonArray familiesArr = doc["families"].as<JsonArray>();
+    parsedFamilies.reserve(familiesArr.size());
+
+    for (JsonObject fObj : familiesArr) {
+      ManifestFamily family;
+      family.name = fObj["name"] | "";
+      family.description = fObj["description"] | "";
+      family.languages = fObj["languages"] | "";
+
+      JsonArray stylesArr = fObj["styles"].as<JsonArray>();
+      family.styles.reserve(stylesArr.size());
+      for (JsonVariant s : stylesArr) {
+        family.styles.push_back(s.as<std::string>());
       }
 
-      if (!CrossPointSettings::isSdFontPointSizeAllowedForRange(file.pointSize, SETTINGS.sdFontSizeRange)) {
+      family.totalSize = 0;
+      JsonArray filesArr = fObj["files"].as<JsonArray>();
+      family.files.reserve(filesArr.size());
+      for (JsonObject fileObj : filesArr) {
+        ManifestFile file;
+        file.name = fileObj["name"] | "";
+        file.size = fileObj["size"] | 0;
+        if (!parseManifestPointSize(file.name.c_str(), file.pointSize)) {
+          LOG_ERR("FONT", "Malformed manifest file entry: invalid filename %s", file.name.c_str());
+          errorMessage_ = "Invalid font manifest";
+          return false;
+        }
+
+        if (!CrossPointSettings::isSdFontPointSizeAllowedForRange(file.pointSize, SETTINGS.sdFontSizeRange)) {
+          continue;
+        }
+
+        if (!fileObj["crc32"].is<uint32_t>()) {
+          LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
+          errorMessage_ = "Invalid font manifest";
+          return false;
+        }
+        file.crc32 = fileObj["crc32"].as<uint32_t>();
+
+        family.totalSize += file.size;
+        family.files.push_back(std::move(file));
+      }
+
+      if (family.files.empty()) {
         continue;
       }
 
-      if (!fileObj["crc32"].is<uint32_t>()) {
-        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
-        errorMessage_ = "Invalid font manifest";
-        return false;
-      }
-      file.crc32 = fileObj["crc32"].as<uint32_t>();
-
-      family.totalSize += file.size;
-      family.files.push_back(std::move(file));
+      parsedFamilies.push_back(std::move(family));
     }
 
-    if (family.files.empty()) {
-      continue;
-    }
+    families_.swap(parsedFamilies);
+  }  // JsonDocument freed here, before the registry is loaded below.
 
+  // Second pass: load the installed-font registry and resolve installed/update
+  // state now that the manifest JsonDocument has been released, keeping peak
+  // heap usage down on devices with many SD fonts installed.
+  fontInstaller_.refreshRegistry();
+  for (auto& family : families_) {
     resolveInstalledFamilyName(family);
-
-    families_.push_back(std::move(family));
   }
 
   LOG_DBG("FONT", "Manifest loaded: %zu families", families_.size());
@@ -386,6 +445,10 @@ void FontDownloadActivity::downloadBatch(bool updatesOnly) {
     requestUpdateAndWait();
 
     if (!fetchAndParseManifest()) {
+      if (cancelRequested_) {
+        finishAfterBackPress();
+        return;
+      }
       RenderLock lock(*this);
       state_ = ERROR;
       return;
@@ -496,6 +559,10 @@ void FontDownloadActivity::returnToFamilyList() {
     requestUpdateAndWait();
 
     if (!fetchAndParseManifest()) {
+      if (cancelRequested_) {
+        finishAfterBackPress();
+        return;
+      }
       RenderLock lock(*this);
       state_ = ERROR;
       return;
@@ -599,6 +666,22 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     HttpDownloader::DownloadOptions downloadOptions;
     downloadOptions.preservePartial = true;
     downloadOptions.resumePartial = true;
+    // Poll the Cancel (Back) button from shouldCancel, which HttpDownloader
+    // checks at the top of every read-loop iteration. The progress callback is
+    // throttled to every 64KB / 250ms, so polling input there dropped quick
+    // taps and forced the user to press Cancel repeatedly.
+    downloadOptions.shouldCancel = [this]() {
+      if (cancelRequested_) {
+        return true;
+      }
+      mappedInput.update();
+      if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+          mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+          mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+        cancelRequested_ = true;
+      }
+      return cancelRequested_;
+    };
     HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
     for (int attempt = 1; attempt <= FONT_DOWNLOAD_MAX_ATTEMPTS; ++attempt) {
       {
@@ -619,17 +702,15 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
           [this](size_t downloaded, size_t total) {
             fileProgress_ = downloaded;
             fileTotal_ = total;
-            mappedInput.update();
-            if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-                mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-              cancelRequested_ = true;
-            }
             requestUpdate(true);
           },
           &cancelRequested_, "", "", downloadOptions);
       if (result == HttpDownloader::ABORTED) {
         LOG_INF("FONT", "Download cancelled: %s", file.name.c_str());
         Storage.remove(tempPath);
+        // The Back release that confirmed the cancel would otherwise be seen by
+        // the family list and treated as a request to leave the screen.
+        mappedInput.suppressNextBackRelease();
         {
           RenderLock lock(*this);
           state_ = FAMILY_LIST;
@@ -1025,6 +1106,8 @@ void FontDownloadActivity::render(RenderLock&&) {
 
   if (state_ == LOADING_MANIFEST) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
     if (families_.empty()) {
       renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_NO_FONTS_AVAILABLE));

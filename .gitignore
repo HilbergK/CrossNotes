@@ -34,3 +34,5 @@ lib/EpdFont/scripts/output/
 /site/public/images/
 /site/public/catalog
 /site/public/CNAME
+
+dist-publish/

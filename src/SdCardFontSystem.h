@@ -26,6 +26,9 @@ class SdCardFontSystem {
   /// Call ensureLoaded() later to restore it before reader rendering.
   void releaseLoadedFont(GfxRenderer& renderer);
 
+  /// Release all SD-font RAM that network/TLS work does not need.
+  void releaseForNetwork(GfxRenderer& renderer);
+
   /// Resolve an SD card font ID from family name + fontSize enum.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t fontSizeEnum) const;

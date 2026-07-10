@@ -24,6 +24,8 @@ void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
+  sdFontSystem.releaseForNetwork(renderer);
+
   {
     RenderLock lock(*this);
     state = AUTHENTICATING;

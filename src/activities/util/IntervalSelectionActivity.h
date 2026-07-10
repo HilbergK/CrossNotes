@@ -11,14 +11,13 @@ class GfxRenderer;
 class IntervalSelectionActivity final : public Activity {
  public:
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
-                                     StrId titleId, StrId stepHintId, int initialValue, int minValue, int maxValue,
-                                     int smallStep, int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
+                                     StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
+                                     int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
                                      bool readerActivity = false, bool allowPowerAsConfirm = false,
                                      bool ignoreInitialConfirmRelease = false, bool showPercentValue = false,
                                      StrId maxBoundaryLabelId = StrId::STR_NONE_OPT)
       : Activity(activityName, renderer, mappedInput),
         titleId(titleId),
-        stepHintId(stepHintId),
         valueFormatId(valueFormatId),
         maxBoundaryLabelId(maxBoundaryLabelId),
         value(initialValue),
@@ -39,7 +38,6 @@ class IntervalSelectionActivity final : public Activity {
 
  private:
   StrId titleId;
-  StrId stepHintId;
   StrId valueFormatId;
   StrId maxBoundaryLabelId;
   int value;
@@ -55,4 +53,5 @@ class IntervalSelectionActivity final : public Activity {
 
   void adjustValue(int delta);
   int clampedValue(int candidate) const;
+  void drawStepHintLine(int y, StrId labelId, int step);
 };

@@ -4,7 +4,7 @@
 #include <type_traits>
 
 namespace {
-constexpr size_t INFLATE_DICT_SIZE = 32768;
+constexpr size_t INFLATE_DICT_SIZE = InflateReader::STREAMING_DICT_SIZE;
 }
 
 // Guarantee the cast pattern in the header comment is valid.
@@ -19,6 +19,7 @@ bool InflateReader::init(const bool streaming) {
   if (streaming) {
     ringBuffer = static_cast<uint8_t*>(malloc(INFLATE_DICT_SIZE));
     if (!ringBuffer) return false;
+    ownsRingBuffer = true;
     memset(ringBuffer, 0, INFLATE_DICT_SIZE);
   }
 
@@ -26,11 +27,25 @@ bool InflateReader::init(const bool streaming) {
   return true;
 }
 
+bool InflateReader::initWithExternalDictionary(uint8_t* dictionary, const size_t dictionarySize) {
+  deinit();
+  if (!dictionary || dictionarySize < INFLATE_DICT_SIZE) return false;
+
+  ringBuffer = dictionary;
+  ownsRingBuffer = false;
+  memset(ringBuffer, 0, INFLATE_DICT_SIZE);
+  uzlib_uncompress_init(&decomp, ringBuffer, INFLATE_DICT_SIZE);
+  return true;
+}
+
 void InflateReader::deinit() {
   if (ringBuffer) {
-    free(ringBuffer);
+    if (ownsRingBuffer) {
+      free(ringBuffer);
+    }
     ringBuffer = nullptr;
   }
+  ownsRingBuffer = false;
   memset(&decomp, 0, sizeof(decomp));
 }
 

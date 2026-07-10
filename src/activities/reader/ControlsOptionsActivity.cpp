@@ -10,7 +10,6 @@
 #include "MappedInputManager.h"
 #include "SettingsList.h"
 #include "activities/settings/ButtonRemapActivity.h"
-#include "activities/util/OptionSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -140,20 +139,14 @@ void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
   if (currentIndex >= optionCount) currentIndex = 0;
 
   const SettingInfo selectedSetting = setting;
-  startActivityForResult(
-      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "ControlsOptionSelect", setting.nameId,
-                                                std::move(options), currentIndex, true),
-      [selectedSetting](const ActivityResult& result) {
-        if (result.isCancelled) return;
-
-        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
-        if (selection == nullptr) return;
-
-        if (selectedSetting.valuePtr != nullptr) {
-          SETTINGS.*(selectedSetting.valuePtr) = enumRawValueForDisplayIndex(selectedSetting, selection->index);
-          SETTINGS.saveToFile();
-        }
-      });
+  optionPopup.show(setting.nameId, options, currentIndex, [selectedSetting](int selectedIndex) {
+    if (selectedSetting.valuePtr != nullptr) {
+      SETTINGS.*(selectedSetting.valuePtr) =
+          enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(selectedIndex));
+      SETTINGS.saveToFile();
+    }
+  });
+  requestUpdate();
 }
 
 void ControlsOptionsActivity::toggleCurrentSetting() {
@@ -202,6 +195,8 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
 }
 
 void ControlsOptionsActivity::loop() {
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   buttonNavigator.onNextRelease([this] {
     moveSelection(true);
     requestUpdate();
@@ -231,6 +226,8 @@ void ControlsOptionsActivity::loop() {
 }
 
 void ControlsOptionsActivity::render(RenderLock&&) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

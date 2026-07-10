@@ -107,7 +107,6 @@ void FontSelectionActivity::onEnter() {
 
   fonts_.push_back({I18N.get(StrId::STR_LEXEND_DECA), true, 0});
   fonts_.push_back({I18N.get(StrId::STR_BITTER), true, 1});
-  fonts_.push_back({I18N.get(StrId::STR_CHAREINK), true, 2});
 
   if (registry_) {
     const auto& families = registry_->getFamilies();
@@ -200,6 +199,7 @@ void FontSelectionActivity::handleSelection() {
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
     }
   }
+  mappedInput.suppressNextConfirmRelease();
   finish();
 }
 

@@ -6,6 +6,7 @@ async function fetchStatus() {
         }
         const data = await response.json();
         document.getElementById('version').textContent = data.version || 'N/A';
+        document.getElementById('serial').textContent = data.serial || 'N/A';
         document.getElementById('ip-address').textContent = data.ip || 'N/A';
         document.getElementById('free-heap').textContent = data.freeHeap
           ? data.freeHeap.toLocaleString() + ' bytes'

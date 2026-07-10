@@ -140,7 +140,7 @@ void formatStreakStat(const GlobalReadingStats& globalStats, char* buf, const si
 Rect coverImageRectForFrame(const Rect& coverRect);
 
 void drawCenteredStatsRow(const GfxRenderer& renderer, const uint8_t* icon, const int iconSize, const char* label,
-                          const int regionTop, const int regionBottom) {
+                          const int regionTop, const int regionBottom, const bool inverted) {
   const int screenWidth = renderer.getScreenWidth();
   const int regionHeight = regionBottom - regionTop;
   if (regionHeight <= 0) {
@@ -160,8 +160,12 @@ void drawCenteredStatsRow(const GfxRenderer& renderer, const uint8_t* icon, cons
   const int textX = iconX + iconSize + iconTextGap;
   const int textY = topY + (rowHeight - labelLineHeight) / 2;
 
-  renderer.drawIconInverted(icon, iconX, iconY, iconSize, iconSize);
-  renderer.drawText(UI_10_FONT_ID, textX, textY, text.c_str(), false);
+  if (inverted) {
+    renderer.drawIcon(icon, iconX, iconY, iconSize, iconSize);
+  } else {
+    renderer.drawIconInverted(icon, iconX, iconY, iconSize, iconSize);
+  }
+  renderer.drawText(UI_10_FONT_ID, textX, textY, text.c_str(), inverted);
 }
 
 int progressLabelBottomY(const GfxRenderer& renderer, const Rect& coverRect, const float progressPercent) {
@@ -176,7 +180,7 @@ int progressLabelBottomY(const GfxRenderer& renderer, const Rect& coverRect, con
 }
 
 void drawStatsOverlay(const GfxRenderer& renderer, const GlobalReadingStats& globalStats, const Rect& coverRect,
-                      const float progressPercent) {
+                      const float progressPercent, const bool inverted) {
   if (!gpio.deviceIsX3()) {
     return;
   }
@@ -188,12 +192,12 @@ void drawStatsOverlay(const GfxRenderer& renderer, const GlobalReadingStats& glo
   const int readerRegionTop = 0;
   const int readerRegionBottom = coverImageRectForFrame(coverRect).y;
   drawCenteredStatsRow(renderer, readerTypeIcon(globalStats), kStatsFooterReaderIconSize, readerLabel, readerRegionTop,
-                       readerRegionBottom);
+                       readerRegionBottom, inverted);
 
   const int streakRegionTop = progressLabelBottomY(renderer, coverRect, progressPercent);
   const int streakRegionBottom = renderer.getScreenHeight();
-  drawCenteredStatsRow(renderer, StreakIcon, kStatsFooterStreakIconSize, streakBuf, streakRegionTop,
-                       streakRegionBottom);
+  drawCenteredStatsRow(renderer, StreakIcon, kStatsFooterStreakIconSize, streakBuf, streakRegionTop, streakRegionBottom,
+                       inverted);
 }
 
 Rect coverRectForScreen(const GfxRenderer& renderer, const Rect& rect) {
@@ -641,9 +645,12 @@ void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, cons
 void MinimalTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                        int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                        bool& bufferRestored, const std::function<bool()>& storeCoverBuffer,
-                                       const BookReadingStats* stats, float progressPercent) const {
+                                       const BookReadingStats* stats, float progressPercent,
+                                       const GlobalReadingStats* globalStats, const char* currentChapterTitle) const {
   (void)selectorIndex;
   (void)bufferRestored;
+  (void)globalStats;
+  (void)currentChapterTitle;
 
   const Rect coverRect = coverRectForScreen(renderer, rect);
   if (recentBooks.empty()) {
@@ -678,30 +685,30 @@ void MinimalTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const s
 }
 
 void MinimalTheme::drawSleepScreen(const GfxRenderer& renderer, const RecentBook& book, const BookReadingStats* stats,
-                                   const float progressPercent) const {
-  renderer.clearScreen(0x00);
+                                   const float progressPercent, const bool inverted) const {
+  renderer.clearScreen(inverted ? 0xFF : 0x00);
 
   const Rect contentRect{0, MinimalMetrics::values.homeTopPadding, renderer.getScreenWidth(),
                          MinimalMetrics::values.homeCoverTileHeight};
   const Rect coverRect = coverRectForScreen(renderer, contentRect);
-  drawBookCover(renderer, coverRect, book, Color::Black);
-  drawProgressBlock(renderer, coverRect, stats, progressPercent, true);
+  drawBookCover(renderer, coverRect, book, inverted ? Color::White : Color::Black);
+  drawProgressBlock(renderer, coverRect, stats, progressPercent, !inverted);
 }
 
 void MinimalTheme::drawStatsSleepScreen(const GfxRenderer& renderer, const RecentBook& book,
                                         const BookReadingStats* stats, const GlobalReadingStats* globalStats,
-                                        const float progressPercent) const {
-  drawSleepScreen(renderer, book, stats, progressPercent);
+                                        const float progressPercent, const bool inverted) const {
+  drawSleepScreen(renderer, book, stats, progressPercent, inverted);
   if (globalStats != nullptr) {
     const Rect contentRect{0, MinimalMetrics::values.homeTopPadding, renderer.getScreenWidth(),
                            MinimalMetrics::values.homeCoverTileHeight};
     const Rect coverRect = coverRectForScreen(renderer, contentRect);
-    drawStatsOverlay(renderer, *globalStats, coverRect, progressPercent);
+    drawStatsOverlay(renderer, *globalStats, coverRect, progressPercent, inverted);
   }
 }
 
 void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                                  const std::function<std::string(int index)>& buttonLabel,
+                                  const std::function<const char*(int index)>& buttonLabel,
                                   const std::function<UIIcon(int index)>& rowIcon) const {
   (void)rect;
   (void)rowIcon;
@@ -728,9 +735,10 @@ void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCo
       renderer.fillPolygon(triangleXPoints, triangleYPoints, 3, true);
     }
 
-    const std::string label = buttonLabel(i);
-    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label.c_str());
+    const char* label = buttonLabel != nullptr ? buttonLabel(i) : "";
+    if (!label) label = "";
+    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label);
     const int labelY = rowY + (kMenuRowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    renderer.drawText(UI_12_FONT_ID, panelX + (panelW - labelW) / 2, labelY, label.c_str());
+    renderer.drawText(UI_12_FONT_ID, panelX + (panelW - labelW) / 2, labelY, label);
   }
 }

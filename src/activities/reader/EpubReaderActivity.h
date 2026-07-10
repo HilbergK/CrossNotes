@@ -5,14 +5,23 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 
 #include "BookReadingStats.h"
 #include "BookmarkStore.h"
+#include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "GlobalReadingStats.h"
 #include "activities/Activity.h"
+
+struct ToastRect {
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 0;
+};
 
 class EpubReaderActivity final : public Activity {
  public:
@@ -53,7 +62,10 @@ class EpubReaderActivity final : public Activity {
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
+  bool pendingRelayoutReposition = false;
   uint16_t cachedPageParagraphIndex = UINT16_MAX;
+  uint16_t cachedPageParagraphOffset = 0;
+  uint16_t cachedPageParagraphSpan = 0;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
@@ -110,6 +122,10 @@ class EpubReaderActivity final : public Activity {
   bool safeModeToastShown = false;
   uint8_t renderModeToastMode = 0;
   unsigned long renderModeToastShowTime = 0UL;
+  std::unique_ptr<uint8_t[]> renderModeToastRegionBuffer;
+  size_t renderModeToastRegionBufferSize = 0;
+  ToastRect renderModeToastRegion;
+  bool renderModeToastRegionSaved = false;
   int completionTriggerSpineIndex = -1;
   float completionTriggerSpineProgress = 1.0f;
   bool completionPromptQueued = false;
@@ -124,6 +140,8 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
+  // Next-book suggestion menu for the End-of-Book screen
+  EndOfBookOptions endOfBookOptions;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -142,7 +160,10 @@ class EpubReaderActivity final : public Activity {
   bool shouldUseFootnotePreview(int targetSpineIndex, const std::string& anchor) const;
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();
-  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Remap the cached relative reading position once the section's real page count is known
+  // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
+  // No-op when pagination is unchanged (plain resume).
+  bool applyDeferredReposition();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void cacheCurrentSectionPosition();
   void pauseReadingPaceTimer(const char* reason = "unknown");
@@ -160,6 +181,8 @@ class EpubReaderActivity final : public Activity {
   bool estimateTimeLeftSeconds(bool bookEstimate, uint32_t& seconds) const;
   bool formatTimeLeftLabel(char* buf, size_t len) const;
   void refreshCachedTimeLeftEstimate();
+  void applyBookStatsEditsFromDisk();
+  void handleBookStatsReturn();
   void resetCurrentBookStatsAfterDelete();
   void openFileTransfer();
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false);
@@ -191,6 +214,8 @@ class EpubReaderActivity final : public Activity {
   bool executeLongPowerButtonAction();
   void handleClippingJump(const ClippingJumpResult& clipping);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  // Opens the reader menu for the current position (short-press Confirm)
+  void openReaderMenu();
   void applyOrientation(uint8_t orientation);
   void pageTurn(bool isForwardTurn, const char* source = "unknown");
   float getCurrentBookProgressPercent() const;
@@ -203,6 +228,9 @@ class EpubReaderActivity final : public Activity {
   void showTiltPageTurnFeedback(bool enabled);
   void showRenderModeToast(uint8_t renderMode);
   void showSafeModeToast();
+  bool storeRenderModeToastRegion(const char* msg);
+  void drawRenderModeToastBuffer(const char* msg);
+  bool restoreRenderModeToastRegion();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

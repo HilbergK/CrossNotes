@@ -219,6 +219,8 @@ bool SdCardFontRegistry::discover() {
   return !families_.empty();
 }
 
+void SdCardFontRegistry::clear() { std::vector<SdCardFontFamilyInfo>().swap(families_); }
+
 const char* SdCardFontRegistry::findFamilyRoot(const char* familyName) {
   if (!familyName || !*familyName) return nullptr;
   char path[160];

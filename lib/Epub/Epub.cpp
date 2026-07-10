@@ -2,9 +2,12 @@
 
 #include <ArduinoJson.h>
 #include <FsHelpers.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
+#include <MemoryBudget.h>
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -23,9 +26,37 @@
 
 namespace {
 constexpr int kDefaultThumbHeight = 180;
-constexpr char kCrossInkLocationsPath[] = "META-INF/x-locations.json";
-constexpr size_t kCrossInkLocationsMaxBytes = 64 * 1024;
-constexpr uint32_t kDefaultReferenceWordsPerPage = 250;
+constexpr char kXLocationsPath[] = "META-INF/x-locations.json";
+constexpr char kXLocationsFormat[] = "x-locations";
+constexpr char kLegacyXLocationsFormat[] = "crossink-locations";
+constexpr size_t kXLocationsMaxBytes = 64 * 1024;
+constexpr uint32_t kDefaultReferenceCharactersPerPage = 1500;
+
+bool isSupportedLocationsFormat(const char* format) {
+  return std::strcmp(format, kXLocationsFormat) == 0 || std::strcmp(format, kLegacyXLocationsFormat) == 0;
+}
+
+void buildXLocationsJsonFilter(JsonDocument& filter) {
+  JsonObject root = filter.to<JsonObject>();
+  root["format"] = true;
+  root["version"] = true;
+  root["totalLocations"] = true;
+  root["totalWords"] = true;
+  root["totalCharacters"] = true;
+  root["wordsPerReferencePage"] = true;
+  root["charactersPerReferencePage"] = true;
+  root["totalReferencePages"] = true;
+
+  JsonArray spine = root["spine"].to<JsonArray>();
+  JsonObject spineEntry = spine.add<JsonObject>();
+  spineEntry["index"] = true;
+  spineEntry["startLocation"] = true;
+  spineEntry["endLocation"] = true;
+  spineEntry["wordStart"] = true;
+  spineEntry["wordCount"] = true;
+  spineEntry["characterStart"] = true;
+  spineEntry["characterCount"] = true;
+}
 
 float clampUnit(const float value) {
   if (value <= 0.0f) {
@@ -47,8 +78,24 @@ void normalizeThumbDimensions(int& width, int& height) {
     height = kDefaultThumbHeight;
   }
   if (width <= 0) {
-    width = static_cast<int>((static_cast<int64_t>(height) * 3 + 2) / 5);
+    width = static_cast<int>((static_cast<int64_t>(height) * 2 + 1) / 3);
   }
+}
+
+std::unique_ptr<BookMetadataCache> makeBookMetadataCacheNoThrow(const std::string& cachePath) {
+  auto cache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!cache) {
+    LOG_ERR("EBP", "OOM: BookMetadataCache (%u free, %u max alloc)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  }
+  return cache;
+}
+
+std::unique_ptr<CssParser> makeCssParserNoThrow(const std::string& cachePath) {
+  auto parser = makeUniqueNoThrow<CssParser>(cachePath);
+  if (!parser) {
+    LOG_ERR("EBP", "OOM: CssParser (%u free, %u max alloc)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  }
+  return parser;
 }
 
 bool cachedBmpMatchesDimensions(const std::string& path, const int width, const int height,
@@ -79,6 +126,22 @@ bool cachedBmpMatchesDimensions(const std::string& path, const int width, const 
     Storage.remove(path.c_str());
   }
   return matches;
+}
+
+void releaseReaderSdFontCachesBeforeCoverDecode(const GfxRenderer* renderer, const int readerFontId,
+                                                const char* reason) {
+  if (!renderer) return;
+  if (readerFontId <= 0) return;
+  if (!renderer->isSdCardFont(readerFontId)) return;
+
+  const auto before = MemoryBudget::snapshot();
+  if (!MemoryBudget::shouldReleaseSdFontCachesForEpubInlineImage(before)) return;
+
+  if (!renderer->releaseSdCardFontForLowMemory(readerFontId)) return;
+
+  const auto after = MemoryBudget::snapshot();
+  LOG_DBG("EBP", "Released SD font caches before %s: free=%u->%u maxAlloc=%u->%u", reason, before.freeHeap,
+          after.freeHeap, before.maxAllocHeap, after.maxAllocHeap);
 }
 
 std::string getThumbBmpPathForDimensions(const std::string& cachePath, int width, int height) {
@@ -445,10 +508,17 @@ Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
 
   LOG_DBG("EBP", "CSS files to parse: %zu", cssFiles.size());
 
-  // See if we have a cached version of the CSS rules
+  // See if we have a usable cached version of the CSS rules. File existence alone is not enough:
+  // stale cache formats are removed by loadFromCache(), then rebuilt below.
   if (cssParser->hasCache() && !forceRebuild) {
-    LOG_DBG("EBP", "CSS cache exists, skipping parseCssFiles");
-    return cssParser->isCachePartial() ? CssParseStatus::Partial : CssParseStatus::Complete;
+    if (cssParser->loadFromCache()) {
+      const bool partialCache = cssParser->isCachePartial();
+      LOG_DBG("EBP", "CSS cache valid, skipping parseCssFiles");
+      cssParser->clear();
+      return partialCache ? CssParseStatus::Partial : CssParseStatus::Complete;
+    }
+    LOG_DBG("EBP", "CSS cache invalid, rebuilding CSS rules");
+    cssParser->clear();
   }
 
   // No cache yet - parse CSS files. If memory runs out partway through, keep
@@ -553,9 +623,16 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
   // Initialize spine/TOC cache
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+  if (!bookMetadataCache) {
+    return false;
+  }
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser(cachePath));
+  cssParser = makeCssParserNoThrow(cachePath);
+  if (!cssParser) {
+    bookMetadataCache.reset();
+    return false;
+  }
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
@@ -591,7 +668,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         }
         bookMetadataCache.reset();
         const CssParseStatus cssStatus = parseCssFiles(forceCssRebuild);
-        bookMetadataCache.reset(new BookMetadataCache(cachePath));
+        bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+        if (!bookMetadataCache) {
+          return false;
+        }
         if (!bookMetadataCache->load()) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
@@ -607,7 +687,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         }
       }
     }
-    loadCrossInkLocations();
+    loadXLocations();
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
   }
@@ -709,13 +789,16 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   // Reload the cache from disk so it's in the correct state
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+  if (!bookMetadataCache) {
+    return false;
+  }
   if (!bookMetadataCache->load()) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
     return false;
   }
 
-  loadCrossInkLocations();
+  loadXLocations();
   LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
   return true;
 }
@@ -779,7 +862,7 @@ std::string Epub::getCoverBmpPath(bool cropped) const {
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
-bool Epub::generateCoverBmp(bool cropped) const {
+bool Epub::generateCoverBmp(bool cropped, const GfxRenderer* renderer, const int readerFontId) const {
   // Already generated, return true
   if (Storage.exists(getCoverBmpPath(cropped).c_str())) {
     return true;
@@ -798,37 +881,26 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode)", cropped ? "cropped" : "fit");
-    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+    std::string coverJpgPath;
+    if (!ensureCachedCoverImage(coverImageHref, coverJpgPath)) {
+      return false;
+    }
 
     FsFile coverJpg;
-    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
-    if (!readItemContentsToStream(coverImageHref, coverJpg, 1024)) {
-      LOG_ERR("EBP", "Failed to read cover JPG item: %s", coverImageHref.c_str());
-      coverJpg.close();
-      Storage.remove(coverJpgTempPath.c_str());
-      return false;
-    }
-    // Explicitly close() file before reopening for reading
-    coverJpg.close();
-
-    if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
-      Storage.remove(coverJpgTempPath.c_str());
+    if (!Storage.openFileForRead("EBP", coverJpgPath, coverJpg)) {
       return false;
     }
 
     FsFile coverBmp;
     if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
       coverJpg.close();
-      Storage.remove(coverJpgTempPath.c_str());
       return false;
     }
+    releaseReaderSdFontCachesBeforeCoverDecode(renderer, readerFontId, "cover JPG decode");
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped);
-    // Explicitly close() files before calling Storage.remove()
+    // Explicitly close() files before leaving the converter path.
     coverJpg.close();
     coverBmp.close();
-    Storage.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from cover image");
@@ -840,37 +912,26 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
   if (FsHelpers::hasPngExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode)", cropped ? "cropped" : "fit");
-    const auto coverPngTempPath = getCachePath() + "/.cover.png";
+    std::string coverPngPath;
+    if (!ensureCachedCoverImage(coverImageHref, coverPngPath)) {
+      return false;
+    }
 
     FsFile coverPng;
-    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-    if (!readItemContentsToStream(coverImageHref, coverPng, 1024)) {
-      LOG_ERR("EBP", "Failed to read cover PNG item: %s", coverImageHref.c_str());
-      coverPng.close();
-      Storage.remove(coverPngTempPath.c_str());
-      return false;
-    }
-    // Explicitly close() file before reopening for reading
-    coverPng.close();
-
-    if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
-      Storage.remove(coverPngTempPath.c_str());
+    if (!Storage.openFileForRead("EBP", coverPngPath, coverPng)) {
       return false;
     }
 
     FsFile coverBmp;
     if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
       coverPng.close();
-      Storage.remove(coverPngTempPath.c_str());
       return false;
     }
+    releaseReaderSdFontCachesBeforeCoverDecode(renderer, readerFontId, "cover PNG decode");
     const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped);
-    // Explicitly close() files before calling Storage.remove()
+    // Explicitly close() files before leaving the converter path.
     coverPng.close();
     coverBmp.close();
-    Storage.remove(coverPngTempPath.c_str());
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
@@ -904,15 +965,70 @@ std::string Epub::getAdaptiveThumbBmpPath(int width, int height) const {
   return getAdaptiveThumbBmpPathForDimensions(cachePath, width, height);
 }
 
-bool Epub::generateThumbBmp(int height) const { return generateThumbBmp(0, height); }
-
-bool Epub::generateThumbBmp(int width, int height) const { return generateThumbBmpInternal(width, height, false); }
-
-bool Epub::generateAdaptiveThumbBmp(int width, int height) const {
-  return generateThumbBmpInternal(width, height, true);
+bool Epub::generateThumbBmp(int height, const GfxRenderer* renderer, const int readerFontId) const {
+  return generateThumbBmp(0, height, renderer, readerFontId);
 }
 
-bool Epub::generateThumbBmpInternal(int width, int height, const bool adaptiveContain) const {
+bool Epub::generateThumbBmp(int width, int height, const GfxRenderer* renderer, const int readerFontId) const {
+  return generateThumbBmpInternal(width, height, false, renderer, readerFontId);
+}
+
+bool Epub::generateAdaptiveThumbBmp(int width, int height, const GfxRenderer* renderer, const int readerFontId) const {
+  return generateThumbBmpInternal(width, height, true, renderer, readerFontId);
+}
+
+std::string Epub::getCachedCoverImagePath(const std::string& coverImageHref) const {
+  if (FsHelpers::hasJpgExtension(coverImageHref)) {
+    return getCachePath() + "/cover_src.jpg";
+  }
+  if (FsHelpers::hasPngExtension(coverImageHref)) {
+    return getCachePath() + "/cover_src.png";
+  }
+  return {};
+}
+
+bool Epub::ensureCachedCoverImage(const std::string& coverImageHref, std::string& outPath) const {
+  outPath = getCachedCoverImagePath(coverImageHref);
+  if (outPath.empty()) {
+    LOG_ERR("EBP", "Cover image is not a supported format, cannot cache source");
+    return false;
+  }
+  if (Storage.exists(outPath.c_str())) {
+    return true;
+  }
+
+  const std::string tmpPath = outPath + ".tmp";
+  if (Storage.exists(tmpPath.c_str())) {
+    Storage.remove(tmpPath.c_str());
+  }
+
+  FsFile coverFile;
+  if (!Storage.openFileForWrite("EBP", tmpPath, coverFile)) {
+    return false;
+  }
+  if (!readItemContentsToStream(coverImageHref, coverFile, 1024)) {
+    LOG_ERR("EBP", "Failed to cache cover image item: %s", coverImageHref.c_str());
+    coverFile.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+  coverFile.close();
+
+  if (Storage.exists(outPath.c_str())) {
+    Storage.remove(outPath.c_str());
+  }
+  if (!Storage.rename(tmpPath.c_str(), outPath.c_str())) {
+    LOG_ERR("EBP", "Failed to finalize cached cover image: %s", outPath.c_str());
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+
+  LOG_DBG("EBP", "Cached cover image source: %s", outPath.c_str());
+  return true;
+}
+
+bool Epub::generateThumbBmpInternal(int width, int height, const bool adaptiveContain, const GfxRenderer* renderer,
+                                    const int readerFontId) const {
   if (height <= 0) {
     LOG_DBG("EBP", "Using default thumb BMP height for requested dimensions: %dx%d", width, height);
   }
@@ -935,40 +1051,29 @@ bool Epub::generateThumbBmpInternal(int width, int height, const bool adaptiveCo
     LOG_DBG("EBP", "No known cover image for thumbnail");
   } else if (FsHelpers::hasJpgExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from JPG cover image");
-    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+    std::string coverJpgPath;
+    if (!ensureCachedCoverImage(coverImageHref, coverJpgPath)) {
+      return false;
+    }
 
     FsFile coverJpg;
-    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
-    if (!readItemContentsToStream(coverImageHref, coverJpg, 1024)) {
-      LOG_ERR("EBP", "Failed to read thumbnail JPG item: %s", coverImageHref.c_str());
-      coverJpg.close();
-      Storage.remove(coverJpgTempPath.c_str());
-      return false;
-    }
-    // Explicitly close() file before reopening for reading
-    coverJpg.close();
-
-    if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
-      Storage.remove(coverJpgTempPath.c_str());
+    if (!Storage.openFileForRead("EBP", coverJpgPath, coverJpg)) {
       return false;
     }
 
     FsFile thumbBmp;
     if (!Storage.openFileForWrite("EBP", thumbPath, thumbBmp)) {
       coverJpg.close();
-      Storage.remove(coverJpgTempPath.c_str());
       return false;
     }
     int THUMB_TARGET_WIDTH = width;
     int THUMB_TARGET_HEIGHT = height;
+    releaseReaderSdFontCachesBeforeCoverDecode(renderer, readerFontId, "thumbnail JPG decode");
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
                                                                              THUMB_TARGET_HEIGHT, adaptiveContain);
-    // Explicitly close() files before calling Storage.remove()
+    // Explicitly close() files before leaving the converter path.
     coverJpg.close();
     thumbBmp.close();
-    Storage.remove(coverJpgTempPath.c_str());
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate thumb BMP from JPG cover image");
@@ -978,40 +1083,29 @@ bool Epub::generateThumbBmpInternal(int width, int height, const bool adaptiveCo
     return success;
   } else if (FsHelpers::hasPngExtension(coverImageHref)) {
     LOG_DBG("EBP", "Generating thumb BMP from PNG cover image");
-    const auto coverPngTempPath = getCachePath() + "/.cover.png";
+    std::string coverPngPath;
+    if (!ensureCachedCoverImage(coverImageHref, coverPngPath)) {
+      return false;
+    }
 
     FsFile coverPng;
-    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-    if (!readItemContentsToStream(coverImageHref, coverPng, 1024)) {
-      LOG_ERR("EBP", "Failed to read thumbnail PNG item: %s", coverImageHref.c_str());
-      coverPng.close();
-      Storage.remove(coverPngTempPath.c_str());
-      return false;
-    }
-    // Explicitly close() file before reopening for reading
-    coverPng.close();
-
-    if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
-      Storage.remove(coverPngTempPath.c_str());
+    if (!Storage.openFileForRead("EBP", coverPngPath, coverPng)) {
       return false;
     }
 
     FsFile thumbBmp;
     if (!Storage.openFileForWrite("EBP", thumbPath, thumbBmp)) {
       coverPng.close();
-      Storage.remove(coverPngTempPath.c_str());
       return false;
     }
     int THUMB_TARGET_WIDTH = width;
     int THUMB_TARGET_HEIGHT = height;
+    releaseReaderSdFontCachesBeforeCoverDecode(renderer, readerFontId, "thumbnail PNG decode");
     const bool success = PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH,
                                                                            THUMB_TARGET_HEIGHT, adaptiveContain);
-    // Explicitly close() files before calling Storage.remove()
+    // Explicitly close() files before leaving the converter path.
     coverPng.close();
     thumbBmp.close();
-    Storage.remove(coverPngTempPath.c_str());
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate thumb BMP from PNG cover image");
@@ -1058,13 +1152,13 @@ bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
 }
 
-bool Epub::loadCrossInkLocations() {
+bool Epub::loadXLocations() {
   locationSpine.clear();
   totalLocations = 0;
   totalWords = 0;
   wordsPerReferencePage = 0;
   totalReferencePages = 0;
-  crossinkLocationsLoaded = false;
+  xLocationsLoaded = false;
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     return false;
@@ -1076,27 +1170,30 @@ bool Epub::loadCrossInkLocations() {
   }
 
   size_t manifestSize = 0;
-  if (!getItemSize(kCrossInkLocationsPath, &manifestSize)) {
+  if (!getItemSize(kXLocationsPath, &manifestSize)) {
     return false;
   }
-  if (manifestSize == 0 || manifestSize > kCrossInkLocationsMaxBytes) {
-    LOG_ERR("EBP", "Ignoring CrossInk locations manifest with unsupported size: %zu bytes", manifestSize);
+  if (manifestSize == 0 || manifestSize > kXLocationsMaxBytes) {
+    LOG_ERR("EBP", "Ignoring X locations manifest with unsupported size: %zu bytes", manifestSize);
     return false;
   }
 
   size_t bytesRead = 0;
-  uint8_t* manifestData = readItemContentsToBytes(kCrossInkLocationsPath, &bytesRead, true);
+  uint8_t* manifestData = readItemContentsToBytes(kXLocationsPath, &bytesRead, true);
   if (!manifestData) {
-    LOG_ERR("EBP", "Failed to read CrossInk locations manifest");
+    LOG_ERR("EBP", "Failed to read X locations manifest");
     return false;
   }
 
+  JsonDocument filter;
+  buildXLocationsJsonFilter(filter);
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, reinterpret_cast<const char*>(manifestData), bytesRead);
+  const DeserializationError err = deserializeJson(doc, reinterpret_cast<const char*>(manifestData), bytesRead,
+                                                   DeserializationOption::Filter(filter.as<JsonVariantConst>()));
   free(manifestData);
 
   if (err) {
-    LOG_ERR("EBP", "CrossInk locations parse error: %s", err.c_str());
+    LOG_ERR("EBP", "X locations parse error: %s", err.c_str());
     return false;
   }
 
@@ -1104,12 +1201,18 @@ bool Epub::loadCrossInkLocations() {
   const int version = doc["version"] | 0;
   const uint32_t parsedTotalLocations = doc["totalLocations"] | 0;
   const uint32_t parsedTotalWords = doc["totalWords"] | 0;
+  const uint32_t parsedTotalCharacters = doc["totalCharacters"] | 0;
   const uint32_t parsedWordsPerReferencePage = doc["wordsPerReferencePage"] | 0;
+  const uint32_t parsedCharactersPerReferencePage = doc["charactersPerReferencePage"] | 0;
+  const bool useCharacterReferencePages = parsedTotalCharacters > 0 && parsedCharactersPerReferencePage > 0;
+  const uint32_t parsedReferenceUnits = useCharacterReferencePages ? parsedTotalCharacters : parsedTotalWords;
+  const uint32_t parsedReferenceUnitsPerPage =
+      useCharacterReferencePages ? parsedCharactersPerReferencePage : parsedWordsPerReferencePage;
   const uint32_t parsedTotalReferencePages = doc["totalReferencePages"] | 0;
   JsonArrayConst spine = doc["spine"];
 
-  if (std::strcmp(format, "crossink-locations") != 0 || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
-    LOG_ERR("EBP", "Ignoring unsupported CrossInk locations manifest");
+  if (!isSupportedLocationsFormat(format) || version != 1 || parsedTotalLocations == 0 || spine.isNull()) {
+    LOG_ERR("EBP", "Ignoring unsupported X locations manifest");
     return false;
   }
 
@@ -1125,13 +1228,15 @@ bool Epub::loadCrossInkLocations() {
 
     const uint32_t startLocation = spineItem["startLocation"] | 0;
     const uint32_t endLocation = spineItem["endLocation"] | 0;
-    const uint32_t wordStart = spineItem["wordStart"] | 0;
-    const uint32_t wordCount = spineItem["wordCount"] | 0;
+    const uint32_t wordStart =
+        useCharacterReferencePages ? (spineItem["characterStart"] | 0) : (spineItem["wordStart"] | 0);
+    const uint32_t wordCount =
+        useCharacterReferencePages ? (spineItem["characterCount"] | 0) : (spineItem["wordCount"] | 0);
     if (startLocation == 0 && endLocation == 0) {
       continue;
     }
     if (startLocation == 0 || endLocation < startLocation || endLocation > parsedTotalLocations) {
-      LOG_ERR("EBP", "Ignoring invalid CrossInk location range at spine %d", index);
+      LOG_ERR("EBP", "Ignoring invalid X location range at spine %d", index);
       continue;
     }
 
@@ -1145,14 +1250,15 @@ bool Epub::loadCrossInkLocations() {
   }
 
   totalLocations = parsedTotalLocations;
-  totalWords = parsedTotalWords;
-  wordsPerReferencePage = parsedWordsPerReferencePage > 0 ? parsedWordsPerReferencePage : kDefaultReferenceWordsPerPage;
+  totalWords = parsedReferenceUnits;
+  wordsPerReferencePage =
+      parsedReferenceUnitsPerPage > 0 ? parsedReferenceUnitsPerPage : kDefaultReferenceCharactersPerPage;
   totalReferencePages = parsedTotalReferencePages;
   if (totalReferencePages == 0 && totalWords > 0 && wordsPerReferencePage > 0) {
     totalReferencePages = (totalWords + wordsPerReferencePage - 1) / wordsPerReferencePage;
   }
-  crossinkLocationsLoaded = true;
-  LOG_INF("EBP", "Loaded CrossInk locations: %lu locations, %lu reference pages across %zu spine items",
+  xLocationsLoaded = true;
+  LOG_INF("EBP", "Loaded X locations: %lu locations, %lu reference pages across %zu spine items",
           static_cast<unsigned long>(totalLocations), static_cast<unsigned long>(totalReferencePages),
           locationSpine.size());
   return true;
@@ -1282,7 +1388,7 @@ float Epub::calculateSizeProgress(const int currentSpineIndex, const float curre
 
 // Calculate progress in book (returns 0.0-1.0)
 float Epub::calculateProgress(const int currentSpineIndex, const float currentSpineRead) const {
-  if (!crossinkLocationsLoaded || totalLocations == 0 || currentSpineIndex < 0 ||
+  if (!xLocationsLoaded || totalLocations == 0 || currentSpineIndex < 0 ||
       currentSpineIndex >= static_cast<int>(locationSpine.size())) {
     return calculateSizeProgress(currentSpineIndex, currentSpineRead);
   }
@@ -1299,7 +1405,7 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
 }
 
 bool Epub::resolveLocationPercentToSpineProgress(const int percent, int& spineIndex, float& spineProgress) const {
-  if (!crossinkLocationsLoaded || totalLocations == 0 || locationSpine.empty()) {
+  if (!xLocationsLoaded || totalLocations == 0 || locationSpine.empty()) {
     return false;
   }
 
@@ -1349,7 +1455,7 @@ bool Epub::resolveReferencePage(const int currentSpineIndex, const float current
                                 uint32_t& pageCount) const {
   currentPage = 0;
   pageCount = 0;
-  if (!crossinkLocationsLoaded || totalWords == 0 || wordsPerReferencePage == 0 || totalReferencePages == 0 ||
+  if (!xLocationsLoaded || totalWords == 0 || wordsPerReferencePage == 0 || totalReferencePages == 0 ||
       currentSpineIndex < 0 || currentSpineIndex >= static_cast<int>(locationSpine.size())) {
     return false;
   }

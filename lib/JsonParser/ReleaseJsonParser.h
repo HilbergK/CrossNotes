@@ -40,6 +40,7 @@ class ReleaseJsonParser {
     ASSET_URL,
     ASSET_SIZE,
     ASSET_SHA256,
+    ASSET_DIGEST,
   };
 
   static void sOnKey(void* ctx, const char* key, size_t len);

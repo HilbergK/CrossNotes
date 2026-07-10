@@ -9,17 +9,6 @@ CrossInk ships multiple firmware build variants because the ESP32-C3 has limited
 
 ## Variants
 
-### `teensy`
-
-Only the smallest point sizes.
-
-- Emoji and miscellaneous-symbol support
-- 4 font sizes:
-  - 8 pt
-  - 9 pt
-  - 10 pt
-  - 12 pt
-
 ### `tiny`
 
 No 18 pt or 20 pt font size. This is the preferred general-purpose build.
@@ -49,4 +38,4 @@ Download the matching `firmware-*.bin` from the [releases page](https://github.c
 pio run -e tiny --target upload
 ```
 
-Replace `tiny` with `teensy` or `xlarge` as needed.
+Replace `tiny` with `xlarge` as needed.

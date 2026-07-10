@@ -2,48 +2,32 @@
   "schema_version": 1,
   "releases": [
     {
-      "id": "stable-1.3.4-teensy",
+      "id": "stable-1.4.0-tiny",
       "channel": "stable",
-      "name": "1.3.4",
-      "version": "1.3.4",
-      "variant": "teensy",
-      "released_at": "2026-06-25T01:54:42Z",
-      "notes": "CrossInk 1.3.4 stable firmware",
-      "firmware_url": "https://github.com/uxjulia/CrossInk/releases/latest/download/firmware-teensy-v1.3.4.bin",
-      "firmware_sha256": "75632380902bfe6ea5a5d43b0ac5fb047ecc6b00c2ce0d846ebc7ae48f1498ed",
-      "size": 5924080,
-      "supported_devices": [
-        "x4",
-        "x3"
-      ]
-    },
-    {
-      "id": "stable-1.3.4-tiny",
-      "channel": "stable",
-      "name": "1.3.4",
-      "version": "1.3.4",
+      "name": "1.4.0",
+      "version": "1.4.0",
       "variant": "tiny",
-      "released_at": "2026-06-25T01:54:42Z",
-      "notes": "CrossInk 1.3.4 stable firmware",
-      "firmware_url": "https://github.com/uxjulia/CrossInk/releases/latest/download/firmware-tiny-v1.3.4.bin",
-      "firmware_sha256": "15f593dd525d3a69782bba52e0243d650f0f34b9a6dbf8ceb23d1db3af0e1b37",
-      "size": 6357968,
+      "released_at": "2026-07-10T13:34:00Z",
+      "notes": "CrossInk 1.4.0 stable firmware",
+      "firmware_url": "https://github.com/uxjulia/CrossInk/releases/download/v1.4.0/firmware-tiny-v1.4.0.bin",
+      "firmware_sha256": "8c3a15814966a3c89c347f7422292387b5fc97f78880dec3cc45b9eaba5746b1",
+      "size": 5491200,
       "supported_devices": [
         "x4",
         "x3"
       ]
     },
     {
-      "id": "stable-1.3.4-xlarge",
+      "id": "stable-1.4.0-xlarge",
       "channel": "stable",
-      "name": "1.3.4",
-      "version": "1.3.4",
+      "name": "1.4.0",
+      "version": "1.4.0",
       "variant": "xlarge",
-      "released_at": "2026-06-25T01:54:42Z",
-      "notes": "CrossInk 1.3.4 stable firmware",
-      "firmware_url": "https://github.com/uxjulia/CrossInk/releases/latest/download/firmware-xlarge-v1.3.4.bin",
-      "firmware_sha256": "add0e6bc744948e95ea794d711e5d78906281bb6188508309a5aac515eccaa89",
-      "size": 6206608,
+      "released_at": "2026-07-10T13:34:00Z",
+      "notes": "CrossInk 1.4.0 stable firmware",
+      "firmware_url": "https://github.com/uxjulia/CrossInk/releases/download/v1.4.0/firmware-xlarge-v1.4.0.bin",
+      "firmware_sha256": "39dda1fbd5682691d9c91ec6c0bf2cf6448cc491fbc14f796d35829c2f386bd6",
+      "size": 5354096,
       "supported_devices": [
         "x4",
         "x3"

@@ -139,6 +139,18 @@ Reading stats can also be used as a sleep screen, including the Minimal Stats sl
 
 For two-device syncing, see [Reading Stats Sync](./reading-stats-sync.md).
 
+## Nearby Position Sync
+
+CrossInk can copy the current EPUB position from one nearby CrossInk reader to
+another over ESP-NOW. Open the same EPUB on both readers, choose **Nearby
+Position Sync** from the in-book menu on both devices, and press **Share** on
+the reader that is already at the correct page.
+
+The receiving reader shows the incoming position and only applies it after you
+confirm it.
+
+For details and troubleshooting, see [Nearby Position Sync](./nearby-position-sync.md).
+
 ## Finished Books And Read Folder
 
 You can manually mark a book as finished from the in-book menu.

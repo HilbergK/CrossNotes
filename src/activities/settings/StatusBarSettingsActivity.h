@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 // Reader status bar configuration activity
@@ -22,6 +23,7 @@ class StatusBarSettingsActivity final : public Activity {
 
  private:
   ButtonNavigator buttonNavigator;
+  OptionPopup optionPopup;
 
   int selectedIndex = 0;
   int visibleItemCount = 0;

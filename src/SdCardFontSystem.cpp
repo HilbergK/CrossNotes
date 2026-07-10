@@ -24,10 +24,12 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
         SETTINGS.sdFontFamilyName[0] = '\0';
+        SETTINGS.saveToFile();
       }
     } else {
       LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
     }
   }
 
@@ -67,6 +69,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
       return;
     }
     const auto* wantedFile = family->selectFile(targetPointSize, sizeStep);
@@ -87,10 +90,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     } else {
       LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
     }
   } else {
     LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
     SETTINGS.sdFontFamilyName[0] = '\0';
+    SETTINGS.saveToFile();
   }
 }
 
@@ -101,6 +106,17 @@ void SdCardFontSystem::releaseLoadedFont(GfxRenderer& renderer) {
   (void)familyName;
   manager_.unloadAll(renderer);
   LOG_DBG("SDFS", "Released SD card font before low-memory operation: %s", familyName.c_str());
+}
+
+void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
+  releaseLoadedFont(renderer);
+
+  const int familyCount = registry_.getFamilyCount();
+  if (familyCount == 0) return;
+
+  registry_.clear();
+  registryDirty_.store(true, std::memory_order_release);
+  LOG_DBG("SDFS", "Released SD font registry before network operation (%d families)", familyCount);
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {
