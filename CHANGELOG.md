@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.1.0] - 2026-07-10 — CrossNotes
+
+Rebased onto **CrossInk v1.4.0**, inheriting all of its features and fixes
+(Dashboard home theme, Nearby Position Sync, XTC reading stats, and a large
+batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below).
+
+### Added
+- Scroll indicator (up/down arrows) in the clippings/notes list when it spans more than one page.
+- **Edit Tag** on a clipping from its action menu (previously tags could only be set at creation).
+- **Notes and Bookmarks** surfaced earlier in the Home menu; the per-book screen lists **Notes** above Bookmarks.
+
+### Changed
+- Note lookups are keyed by the highlight's own creation time, so notes/tags can no longer bleed between two highlights that share the same chapter/page/word position.
+- Deleting a clipping now removes its note/tag too, and asks for confirmation first.
+- On-device note editing is capped at 250 characters (longer notes are written from Phone Notes); avoids a watchdog reset from the keyboard's line-wrapping on very long text.
+- `teensy` build variant removed and built-in fonts reduced to Lexend Deca + Bitter, both inherited from CrossInk v1.4.0. Flash usage dropped to ~84%.
+
+### Known issues
+- Editing an existing note on-device can briefly show a visual ghosting artifact in the detail view. It clears when you leave and reopen the note. Display-refresh quirk only — the stored note is never affected.
+
+---
+
 ## [v1.0.0] - 2026-07-08 — CrossNotes
 
 ### Added
