@@ -151,8 +151,20 @@ void SavedItemsHomeActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, books.size(), selectedIndex,
-        [this](int index) { return books[index].bookTitle; }, [this](int index) { return books[index].bookAuthor; },
-        nullptr);
+        [this](int index) -> std::string {
+          const SavedBookEntry& b = books[index];
+          if (!b.bookTitle.empty()) return b.bookTitle;
+          // Fallback when the stored title is blank (an upstream finished-book
+          // move can blank it — see CHANGELOG v1.1.1): derive a readable name
+          // from the file path so the row is never invisible.
+          const std::string& p = b.bookPath;
+          const size_t slash = p.find_last_of('/');
+          std::string name = (slash == std::string::npos) ? p : p.substr(slash + 1);
+          const size_t dot = name.find_last_of('.');
+          if (dot != std::string::npos) name = name.substr(0, dot);
+          return name.empty() ? p : name;
+        },
+        [this](int index) { return books[index].bookAuthor; }, nullptr);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

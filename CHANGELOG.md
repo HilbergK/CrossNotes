@@ -9,6 +9,7 @@
   - **Clear Clippings** now also clears that book's notes/tags, since notes anchor to clippings that no longer exist.
 
   (Clearing only the reading cache still preserves clippings and notes, unchanged.)
+- The **Notes and Bookmarks** list no longer shows a blank/invisible row when a book's stored title is empty (which an upstream finished-book move can cause); it falls back to the book's filename so the entry is always readable.
 
 ---
 
