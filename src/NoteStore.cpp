@@ -240,12 +240,31 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
   return saveToFile(path);
 }
 
-// ─── Migration ────────────────────────────────────────────────────────────────
+// ─── Migration / bulk delete ────────────────────────────────────────────────
+
+void NoteStore::deleteForFilePath(const std::string& filePath) {
+  const std::string path = notesFilePath(filePath.c_str());
+  if (Storage.exists(path.c_str())) {
+    Storage.remove(path.c_str());
+  }
+  // If the singleton is holding this book's notes in memory, drop them so a
+  // later loadForBook() doesn't short-circuit and show stale, file-less notes.
+  NoteStore& inst = getInstance();
+  if (inst.loaded && inst.bookFilePath == filePath) {
+    inst.unload();
+  }
+}
 
 void NoteStore::migrateForFilePath(const std::string& oldPath, const std::string& newPath) {
   const std::string oldFile = notesFilePath(oldPath.c_str());
   const std::string newFile = notesFilePath(newPath.c_str());
   if (Storage.exists(oldFile.c_str()) && !Storage.exists(newFile.c_str())) {
     Storage.rename(oldFile.c_str(), newFile.c_str());
+  }
+  // Drop stale in-memory state for the old path so a subsequent save can't
+  // recreate the file at the old location.
+  NoteStore& inst = getInstance();
+  if (inst.loaded && inst.bookFilePath == oldPath) {
+    inst.unload();
   }
 }

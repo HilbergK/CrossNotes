@@ -7,6 +7,7 @@
 #include "BookmarkStore.h"
 #include "ClippingStore.h"
 #include "CrossPointState.h"
+#include "NoteStore.h"
 #include "RecentBooksStore.h"
 
 namespace {
@@ -58,6 +59,9 @@ bool migrateMovedEpubState(const std::string& oldPath, const std::string& newPat
     LOG_ERR("BookMove", "Failed to migrate clippings for moved book %s -> %s", oldPath.c_str(), newPath.c_str());
     ok = false;
   }
+
+  // CrossInk Notes: move the book's notes/tags alongside its clippings.
+  NoteStore::migrateForFilePath(oldPath, newPath);
 
   if (keepInRecents) {
     RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);

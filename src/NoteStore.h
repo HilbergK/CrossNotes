@@ -63,8 +63,14 @@ class NoteStore {
   bool deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
                   uint32_t clippingTimestamp);
 
-  // Migrate notes when a file is moved/renamed.
-  void migrateForFilePath(const std::string& oldPath, const std::string& newPath);
+  // Delete all notes/tags for a book — e.g. when the book file is deleted or
+  // its clippings are cleared. Static, operates on disk; mirrors
+  // ClippingStore::deleteForFilePath.
+  static void deleteForFilePath(const std::string& filePath);
+
+  // Migrate a book's notes to a new path when the book moves (e.g. Move to
+  // /Read). Static, operates on disk; mirrors ClippingStore::migrateForFilePath.
+  static void migrateForFilePath(const std::string& oldPath, const std::string& newPath);
 
  private:
   NoteStore() = default;

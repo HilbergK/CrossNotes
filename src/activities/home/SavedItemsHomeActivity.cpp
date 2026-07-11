@@ -13,6 +13,7 @@
 #include "CrossPointState.h"
 #include "FileBrowserActionActivity.h"
 #include "MappedInputManager.h"
+#include "NoteStore.h"
 #include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -234,6 +235,9 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
             case FileBrowserAction::DeleteClippings:
               CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
               CLIPPINGS.clearAll();
+              // CrossInk Notes: clearing a book's clippings also clears its notes/tags,
+              // since notes anchor to clippings that no longer exist.
+              NoteStore::deleteForFilePath(entry.bookPath);
               break;
             default:
               break;

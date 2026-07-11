@@ -15,6 +15,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "NoteStore.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/EpubReaderActivity.h"
@@ -75,6 +76,7 @@ void clearFileMetadata(const std::string& fullPath) {
     Epub(fullPath, "/.crosspoint").clearCache();
     BookmarkStore::deleteForFilePath(fullPath, "epub");
     ClippingStore::deleteForFilePath(fullPath, "epub");
+    NoteStore::deleteForFilePath(fullPath);  // CrossInk Notes: remove notes/tags with the book
   } else if (FsHelpers::hasXtcExtension(fullPath)) {
     BookmarkStore::deleteForFilePath(fullPath, "xtc");
   } else if (FsHelpers::hasTxtExtension(fullPath) || FsHelpers::hasMarkdownExtension(fullPath)) {

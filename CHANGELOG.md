@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.1.1] - 2026-07-10 — CrossNotes
+
+### Fixed
+- Notes/tags are no longer orphaned when a book is moved, deleted, or has its clippings cleared:
+  - **Move to /Read** (finished-book move) now migrates the book's notes alongside its clippings.
+  - **Deleting a book** now removes its notes/tags too (matching clippings and bookmarks).
+  - **Clear Clippings** now also clears that book's notes/tags, since notes anchor to clippings that no longer exist.
+
+  (Clearing only the reading cache still preserves clippings and notes, unchanged.)
+
+---
+
 ## [v1.1.0] - 2026-07-10 — CrossNotes
 
 Rebased onto **CrossInk v1.4.0**, inheriting all of its features and fixes
