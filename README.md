@@ -1,6 +1,6 @@
 # CrossNotes
 
-A fork of [CrossInk](https://github.com/uxjulia/CrossInk) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
 
 Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. The notes are stored on the device and shown right alongside the highlight.
 
