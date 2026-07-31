@@ -72,4 +72,4 @@ pio run -e tiny    # or xlarge
 
 ## Credits
 
-Built on [CrossInk](https://github.com/uxjulia/CrossInk) (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude. MIT License.
+Built on [CrossInk](https://github.com/uxjulia/CrossInk) **v1.4.0.1** (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude. MIT License.
