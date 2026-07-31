@@ -59,6 +59,12 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ---
 
+## [v1.4.0.1] - 2026-07-28
+
+### Added
+
+- Updates to support Xteink device detection so the correct display panel driver is used.
+
 ## [v1.4.0] - 2026-07-10
 
 ### Added
