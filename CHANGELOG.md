@@ -1,5 +1,23 @@
 # Changelog
 
+## [v1.1.1.1] - 2026-07-30 — CrossNotes
+
+Rebased onto **CrossInk v1.4.0.1**. No CrossNotes feature or fix changes — this
+release exists only to carry upstream's device-detection update.
+
+### Changed
+- Inherits CrossInk v1.4.0.1: Xteink device detection now resolves the panel
+  controller at runtime, so newer production runs of the X3/X4 (which ship a
+  UC8279d / UC8179 controller in place of the UC8253 / SSD1677) select the
+  matching display driver.
+
+### Note
+- Detection only switches drivers on a positive match and otherwise keeps the
+  original controller, so existing devices behave as before. This build has not
+  been verified on new-generation hardware.
+
+---
+
 ## [v1.1.1] - 2026-07-10 — CrossNotes
 
 ### Fixed
