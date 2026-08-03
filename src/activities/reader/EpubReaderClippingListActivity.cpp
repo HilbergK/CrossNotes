@@ -732,12 +732,19 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
         subtitle = tagPart + chapter;  // no note text: the chapter gets the rest of the line
       } else {
         const auto fontId = props.subtitleText.font;
-        const int available = std::max(0, static_cast<int>(bounds.width) - 8);
+        // The list insets each row by sidePadding (default 8) on BOTH sides, so
+        // the drawable width is bounds.width - 16; a few px of slack keeps the
+        // widget from clipping our tail.
+        constexpr int kRowSidePadding = 8;
+        constexpr int kSlack = 4;
+        const int available = std::max(0, static_cast<int>(bounds.width) - kRowSidePadding * 2 - kSlack);
         const std::string separator = "  -  ";
         const int afterTag = std::max(0, available - renderer.getTextWidth(fontId, tagPart.c_str()));
         const int separatorWidth = renderer.getTextWidth(fontId, separator.c_str());
-        // Reserve ~40% of the remaining line for the note before sizing the chapter.
-        const int chapterMax = std::max(0, afterTag - separatorWidth - afterTag * 2 / 5);
+        // The chapter takes what it needs, but never so much that the note is
+        // reduced to an ellipsis: hold back enough room for a few characters.
+        const int noteMinWidth = renderer.getTextWidth(fontId, "abcdefgh...");
+        const int chapterMax = std::max(0, afterTag - separatorWidth - noteMinWidth);
         std::string chapterPart = chapter;
         if (renderer.getTextWidth(fontId, chapterPart.c_str()) > chapterMax) {
           chapterPart = renderer.truncatedText(fontId, chapter, chapterMax);
