@@ -9,7 +9,7 @@ Bionic Reading is a reading aid that bolds the first portion of each word, guidi
 
 <img src="./images/bionic-reading/bionic-reading.jpg" height="500" alt="Comparison of the same page with and without Bionic Reading enabled" />
 
-*Left: Bionic Reading off. Right: Bionic Reading on. Both using Literata.*
+_Left: Bionic Reading off. Right: Bionic Reading on. Both using Literata._
 
 ## Enabling Bionic Reading
 
@@ -22,17 +22,16 @@ Toggling the setting will trigger a re-index of your current book, the same as w
 
 <img src="./images/bionic-reading/bionic-reading-notoserif.jpg" height="500" alt="Bionic Reading with Noto Serif font" />
 
-*Bionic Reading with Noto Serif font*
+_Bionic Reading with Noto Serif font_
 
 <img src="./images/bionic-reading/bionic-reading-merriweather.jpg" height="500" alt="Bionic Reading with Merriweather font" />
 
-*Bionic Reading with Merriweather font*
+_Bionic Reading with Merriweather font_
 
 <img src="./images/bionic-reading/bionic-reading-atkinson.jpg" height="500" alt="Bionic Reading with Atkinson Hyperlegible Next font" />
 
-*Bionic Reading with Atkinson Hyperlegible Next font*
+_Bionic Reading with Atkinson Hyperlegible Next font_
 
 ## Notes
 
 - Bionic Reading only applies to regular body text. Already-bold text (headings, emphasis) is left unchanged.
-- The setting is per-device, not per-book — it applies to all books while enabled.

@@ -5,6 +5,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <array>
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,10 +27,13 @@ struct ToastRect {
 
 class EpubReaderActivity final : public Activity {
  public:
+  bool usesFullScreenReaderVerticalSwipes() const override { return true; }
+
   struct ReaderSettingsSnapshot {
     uint8_t fontFamily = 0;
     uint8_t fontSize = 0;
     uint8_t lineHeightPercent = 100;
+    uint8_t wordSpacing = 0;
     uint8_t orientation = 0;
     uint8_t screenMargin = 5;
     uint8_t publisherPageNumbers = 0;
@@ -43,15 +48,27 @@ class EpubReaderActivity final : public Activity {
     uint8_t bionicReadingEnabled = 0;
     uint8_t guideReadingEnabled = 0;
     uint8_t epubRenderMode = 0;
+    uint8_t indexingMethod = CrossPointSettings::INDEXING_FULL_SECTION;
     char sdFontFamilyName[64] = "";
+  };
+
+  struct BookReaderSettingsData {
+    bool hasAutoPageTurnInterval = false;
+    uint16_t autoPageTurnSeconds = 0;
+    bool hasCustomReaderSettings = false;
+    bool hasRenderModeOverride = false;
+    uint8_t renderMode = 0;
+    ReaderSettingsSnapshot readerSettings;
   };
 
  private:
   std::shared_ptr<Epub> epub;
+  BookReaderSettingsData initialBookReaderSettings;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   int activeSectionFontId = 0;
+  uint32_t activeSectionLayoutSignature = 0;
   std::optional<uint16_t> pendingPageJump;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
@@ -62,13 +79,37 @@ class EpubReaderActivity final : public Activity {
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
+  int cachedChapterPageWatermark = 0;
+  struct ChapterGroupEstimateCache {
+    int currentSpineIndex = -1;
+    int firstSpineIndex = -1;
+    int lastSpineIndex = -1;
+    uint32_t settingsSignature = 0;
+    uint32_t knownSiblingPages = 0;
+    uint32_t knownSiblingBytes = 0;
+    uint32_t unknownSiblingBytes = 0;
+    uint32_t precedingKnownPages = 0;
+    uint32_t precedingUnknownBytes = 0;
+    uint16_t unknownSiblingCount = 0;
+    uint16_t precedingUnknownCount = 0;
+    bool siblingEstimateUsed = false;
+    bool valid = false;
+  } chapterGroupEstimate;
   bool pendingRelayoutReposition = false;
   uint16_t cachedPageParagraphIndex = UINT16_MAX;
   uint16_t cachedPageParagraphOffset = 0;
   uint16_t cachedPageParagraphSpan = 0;
+  std::atomic<uint8_t> pendingHeapShapeReaderRedrawStages{0};
+  static constexpr uint8_t HEAP_SHAPE_REDRAW_CLIP = 1U << 0;
+  static constexpr uint8_t HEAP_SHAPE_REDRAW_DICT = 1U << 1;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
+  bool deferredXLocationLoadPending = true;
+  unsigned long lastRenderCompleteMs = 0UL;
+  int idlePrewarmSpine = -1;
+  int idlePrewarmPage = -1;
+  int idlePrewarmFontId = 0;
   bool paceSampleWarmupPending = true;
   uint32_t sessionPaceSampleSeconds = 0;
   uint16_t sessionPaceSampleCount = 0;
@@ -101,6 +142,7 @@ class EpubReaderActivity final : public Activity {
   bool longPowerButtonHandled = false;
   bool sideButtonLongPressHandled = false;
   bool frontButtonLongPressHandled = false;
+  bool touchDictionaryLookupHandled = false;
   int pageLoadRetryCount = 0;
   enum class BookmarkFeedbackType : uint8_t {
     Added,
@@ -145,6 +187,15 @@ class EpubReaderActivity final : public Activity {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
+#if CROSSINK_APP_CAP_TOUCH
+  struct FootnoteTouchTarget {
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t width = 0;
+    int16_t height = 0;
+  };
+  std::array<FootnoteTouchTarget, EPUB_MAX_FOOTNOTES_PER_PAGE> currentPageFootnoteTouchTargets{};
+#endif
   struct SavedPosition {
     int spineIndex;
     int pageNumber;
@@ -153,16 +204,76 @@ class EpubReaderActivity final : public Activity {
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
+  // Viewport of the last render(), captured so loop()'s lazy partial-extension start
+  // builds with identical layout parameters to the pages already rendered.
+  uint16_t buildViewportWidth = 0;
+  uint16_t buildViewportHeight = 0;
+  // Set when the lazy extension start failed, so loop() does not retry every tick.
+  bool partialRebuildStartFailed = false;
+  // Set when a background extension build aborted for low heap. startBuild() still succeeds in
+  // that state -- it is the layout inside buildSomeMore() that runs out of memory -- so without
+  // this flag loop() would restart the same doomed build every tick, and skipLoopDelay() would
+  // hold the loop at full speed while it did. The reader keeps the pages already laid out; a
+  // build is only re-attempted from render() if the reader actually pages past the watermark.
+  bool partialRebuildAbortedForLowMemory = false;
+  // One-shot guard for the silent restart used only when a forward page turn reaches the first
+  // unbuilt page after a confirmed low-memory partial-build abort.
+  bool lowMemoryPartialRestartAttempted = false;
+  bool backgroundBuildPausedForLowMemory = false;
+  std::atomic<bool> sectionBuildCancelRequested{false};
+  std::atomic<bool> goHomeAfterBuildCancel{false};
+
+  // Last position successfully persisted by saveProgress, used to skip redundant
+  // writeAtomic calls on no-op re-renders.
+  int lastSavedSpineIndex = -1;
+  int lastSavedPage = -1;
+  int lastSavedPageCount = -1;
+
   void renderContents(std::unique_ptr<Page> page, int fontId, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
+  void refreshChapterGroupEstimate(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool resolveChapterGroupPageProgress(int& currentPage, int& pageCount, float& chapterProgress,
+                                       bool& pageCountEstimated) const;
   bool shouldUseFootnotePreview(int targetSpineIndex, const std::string& anchor) const;
   std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
   void clearFootnotePreviewState();
-  // Remap the cached relative reading position once the section's real page count is known
+  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Pages laid out per incremental-build pump: on the render path (catching up to the page
+  // being shown) and per loop() tick (background build of a large chapter). Kept small so a
+  // background build chunk never noticeably delays input or a pending render.
+  static constexpr int BUILD_PAGES_PER_CHUNK = 8;
+  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
+  // How many pages to keep laid out ahead of the reader for a still-building section. A page
+  // turn is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder
+  // -- a tiny buffer is enough. The background build stops once the watermark is this far
+  // ahead and resumes as the reader advances; building unbounded instead locked up input by
+  // monopolizing the RenderLock. A giant single-spine book therefore never finalizes its .bin
+  // in one sitting -- instant reopen comes from Section::suspendBuild() persisting the pages
+  // already laid out as a partial file on exit/sleep.
+  static constexpr int BUILD_WINDOW_AHEAD = 5;
+  // Reopening a partial does not immediately restart its whole-chapter extension build.
+  // Start it only when the reader is close enough to need pages past the watermark.
+  static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
+  // Show the indexing popup when an initial build must lay out more than this many pages up front
+  // (a deep resume/jump into a not-yet-built section), so it isn't a silent wait. Kept independent
+  // of the small look-ahead window so ordinary landings stay popup-free.
+  static constexpr int BUILD_POPUP_PAGE_THRESHOLD = 20;
+  // Also show the popup when first building a spine larger than this (uncompressed bytes): its
+  // whole HTML must be inflated before page 1 can lay out (the giant single-spine case), which is
+  // a multi-second wait. Normal chapters are well under this and stay popup-free.
+  static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
+  // If a build predicted to be fast still has not produced the requested page within this
+  // window, show the popup while the blocking build continues.
+  static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
+  // Only true during the blocking build-to-target phase. The parser retains the callback during
+  // background indexing, so this guard prevents it from drawing over an already-visible page.
+  bool buildPopupPending = false;
+  void showBuildPopup();
+  // Remap the cached reading position once the saved paragraph and prior readable watermark are rebuilt
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
-  // No-op when pagination is unchanged (plain resume).
+  bool isRelayoutCatchUpComplete() const;
   bool applyDeferredReposition();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void cacheCurrentSectionPosition();
@@ -202,17 +313,25 @@ class EpubReaderActivity final : public Activity {
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void reindexCurrentSection();
+  void prepareCurrentSectionForRelayout();
   void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
   bool quickActionUsesConfirmRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   bool quickActionUsesPowerRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action) const;
   void suppressConfirmShortcutRelease(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
   void executeFootnoteQuickAction(bool suppressInitialPowerRelease = false);
+#if CROSSINK_APP_CAP_TOUCH
+  void buildFootnoteTouchTargets(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft);
+  bool handleTouchFootnoteLink(int touchX, int touchY);
+#endif
   void suppressPowerShortcutRelease();
   bool consumeLongPowerButtonRelease();
   bool consumeLongPowerButtonHold();
   bool executeShortPowerButtonAction();
   bool executeLongPowerButtonAction();
   void handleClippingJump(const ClippingJumpResult& clipping);
+  bool handleTouchDictionaryLookup();
+  void openWordSelect(bool framebufferContainsPage, int initialTouchX = -1, int initialTouchY = -1,
+                      bool autoLookupInitialWord = false);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
@@ -231,21 +350,50 @@ class EpubReaderActivity final : public Activity {
   bool storeRenderModeToastRegion(const char* msg);
   void drawRenderModeToastBuffer(const char* msg);
   bool restoreRenderModeToastRegion();
+  bool loadDeferredXLocationsIfReady();
 
   // Footnote navigation
-  void navigateToHref(const std::string& href, bool savePosition = false);
+  void navigateToHref(const std::string& href, bool savePosition = false, bool preferFootnotePreview = false);
   void restoreSavedPosition();
 
  public:
-  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
+                              BookReaderSettingsData readerSettings, int initialRefreshCountdown)
+      : Activity("EpubReader", renderer, mappedInput),
+        epub(std::move(epub)),
+        initialBookReaderSettings(std::move(readerSettings)),
+        pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
+  bool prepareManualRefresh() override {
+    pagesUntilFullRefresh = 1;
+    return true;
+  }
   bool preventAutoSleep() override { return automaticPageTurnActive; }
+  // Hold the loop hot only while the build has work this loop would do: a kept-alive
+  // build sitting outside the lookahead window is dormant, and reporting it here would
+  // pin the CPU at full clock (no power saving, yield-only loop) for the whole read.
+  // Mirrors the tick condition in loop(): catch-up phase, or watermark inside the window.
+  bool sectionBuildWantsTick() const {
+    return section && section->isBuilding() &&
+           (!section->activeBuildHasCaughtReadablePages() ||
+            static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  }
+  bool backgroundSectionBuildHasHeap();
+  void idlePrewarmNextPage();
+  bool skipLoopDelay() override { return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory; }
   bool isReaderActivity() const override { return true; }
   bool canSnapshotForSleepOverlay() const override { return true; }
+  bool handlesReaderPowerSettingsOverride() const override { return true; }
+  bool openReaderSettingsMenu() override {
+    if (!epub) {
+      return false;
+    }
+    openReaderMenu();
+    return true;
+  }
   std::string getCurrentBookPath() const override { return epub ? epub->getPath() : std::string{}; }
   void setAutoPageTurnIntervalSeconds(uint16_t seconds);
   uint16_t getAutoPageTurnIntervalSeconds() const;
@@ -254,6 +402,7 @@ class EpubReaderActivity final : public Activity {
   // Used by SleepActivity to prepare the background for the overlay sleep mode.
   // Returns false if the page cannot be loaded (missing cache / file error).
   static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
+  static BookReaderSettingsData readBookReaderSettings(const Epub& epub);
   static uint8_t loadBookRenderMode(const std::string& filePath);
   static bool saveBookRenderMode(const std::string& filePath, uint8_t renderMode);
   static bool resetBookReaderSettings(const std::string& filePath);

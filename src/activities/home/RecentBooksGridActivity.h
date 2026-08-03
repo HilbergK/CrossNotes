@@ -41,4 +41,5 @@ class RecentBooksGridActivity final : public Activity {
   void promptDeleteBook(const RecentBook& book);
   void promptRemoveBook(const std::string& path, const std::string& title);
   void showBookActionMenu(int bookIndex, bool ignoreInitialConfirmRelease = false);
+  int bookIndexFromPoint(int x, int y);
 };

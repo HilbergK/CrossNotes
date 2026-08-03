@@ -135,6 +135,10 @@ class HalStorage::StorageLock {
   HalStorage::StorageLock lock;               \
   return SDCard.method(__VA_ARGS__);
 
+uint64_t HalStorage::totalBytes() const { return SDCard.sdTotalBytes(); }
+
+uint64_t HalStorage::usedBytes() { HAL_STORAGE_WRAPPED_CALL(sdUsedBytes); }
+
 std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
   HAL_STORAGE_WRAPPED_CALL(listFiles, path, maxFiles);
 }
@@ -276,7 +280,45 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Ha
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDir, path); }
+bool HalStorage::removeDir(const char* path) {
+  if (!path || path[0] == '\0') {
+    return false;
+  }
+
+  HalFile dir = open(path);
+  if (!dir || !dir.isDirectory()) {
+    dir.close();
+    return false;
+  }
+
+  char name[128];
+  for (HalFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    const bool isDirectory = entry.isDirectory();
+    const size_t nameLen = entry.getName(name, sizeof(name));
+
+    // SdFat cannot reopen or delete this path while its directory entry is open.
+    entry.close();
+    if (nameLen == 0) {
+      dir.close();
+      return false;
+    }
+
+    std::string entryPath(path);
+    if (entryPath.back() != '/') {
+      entryPath += '/';
+    }
+    entryPath += name;
+
+    const bool removed = isDirectory ? removeDir(entryPath.c_str()) : remove(entryPath.c_str());
+    if (!removed) {
+      dir.close();
+      return false;
+    }
+  }
+
+  dir.close();
+  return rmdir(path);
+}
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.

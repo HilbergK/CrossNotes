@@ -200,7 +200,6 @@ void selfTest() {
     allPassed = false;
   }
   if (allPassed) {
-    LOG_DBG("OBF", "Obfuscation self-test PASSED");
   }
 }
 

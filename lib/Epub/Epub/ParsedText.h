@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -16,20 +17,34 @@ template <typename T>
 class ArenaVector;
 
 class ParsedText {
-  std::vector<std::string> words;
+  // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
+  // of tokens (CJK splits every character), and a vector grows by reallocating its
+  // whole element array into one contiguous block (32 B/std::string -> 64-128 KB at
+  // a few thousand tokens). On the ESP32-C3 that single large contiguous request
+  // fails under a fragmented, BLE-resident heap and the throwing operator new
+  // abort()s the firmware (fresh-open CJK crash). A deque grows in fixed ~512 B nodes
+  // (largest contiguous alloc stays ~2 KB regardless of token count), so it never
+  // triggers that. The per-token parallel arrays below stay vectors: 1 byte / 1 bit
+  // each, they never approach the contiguous-block ceiling.
+  std::deque<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<bool> wordContinues;          // true = word attaches to previous (no space before it)
   std::vector<bool> wordNoSpaceBefore;      // true = may break before token, but no synthetic space when joined
   std::vector<uint8_t> wordBionicBoundary;  // UTF-8 byte offset where the regular suffix starts; 0 = no split
   std::vector<bool> wordGuideDotBefore;     // true = virtual guide dot belongs between previous token and this one
   std::vector<uint8_t> wordBackgroundBlack;
+  std::deque<std::string> rubyTexts;
   bool extraParagraphSpacing;
   bool forceParagraphIndents;
   bool hyphenationEnabled;
   bool bionicReadingEnabled;
   bool guideReadingEnabled;
+  uint8_t wordSpacing;
   BlockStyle blockStyle;
   bool hasRtlWord;
+  // True after an intermediate flush leaves the rest of the same paragraph
+  // buffered. The next layout pass must not apply first-line paragraph rules.
+  bool isContinuation_ = false;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -72,22 +87,32 @@ class ParsedText {
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool forceParagraphIndents = false,
                       const bool hyphenationEnabled = false, const bool bionicReadingEnabled = false,
-                      const bool guideReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle())
+                      const bool guideReadingEnabled = false, const uint8_t wordSpacing = 0,
+                      const BlockStyle& blockStyle = BlockStyle())
       : extraParagraphSpacing(extraParagraphSpacing),
         forceParagraphIndents(forceParagraphIndents),
         hyphenationEnabled(hyphenationEnabled),
         bionicReadingEnabled(bionicReadingEnabled),
         guideReadingEnabled(guideReadingEnabled),
+        wordSpacing(wordSpacing),
         blockStyle(blockStyle),
         hasRtlWord(false) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               bool backgroundBlack = false);
+               bool backgroundBlack = false, uint8_t linkId = 0);
+  void setRubyForWordAt(size_t index, const std::string& ruby);
+  void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
+  EpdFontFamily::Style getWordStyleAt(size_t index) const {
+    return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
+  }
+  std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
+  void ensureRubyCapacity();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  bool isContinuation() const { return isContinuation_; }
   bool layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);

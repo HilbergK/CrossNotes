@@ -69,11 +69,9 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
     credentials.push_back(std::move(cred));
   }
 
-  LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", credentials.size());
-
   if (needsResave) {
     LOG_DBG("WCS", "Resaving JSON with obfuscated passwords");
-    saveToFile();
+    requestResave();
   }
 
   return true;
@@ -141,7 +139,6 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
                             [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
   if (cred != credentials.end()) {
     cred->password = password;
-    LOG_DBG("WCS", "Updated credentials for: %s", ssid.c_str());
     return saveToFile();
   }
 
@@ -153,7 +150,6 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
 
   // Add new credential
   credentials.push_back({ssid, password});
-  LOG_DBG("WCS", "Added credentials for: %s", ssid.c_str());
   return saveToFile();
 }
 
@@ -162,7 +158,6 @@ bool WifiCredentialStore::removeCredential(const std::string& ssid) {
                             [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
   if (cred != credentials.end()) {
     credentials.erase(cred);
-    LOG_DBG("WCS", "Removed credentials for: %s", ssid.c_str());
     if (ssid == lastConnectedSsid) {
       clearLastConnectedSsid();
     }
@@ -204,5 +199,4 @@ void WifiCredentialStore::clearAll() {
   credentials.clear();
   lastConnectedSsid.clear();
   saveToFile();
-  LOG_DBG("WCS", "Cleared all WiFi credentials");
 }

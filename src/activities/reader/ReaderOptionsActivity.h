@@ -1,11 +1,16 @@
 #pragma once
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
 #include <I18n.h>
 
+#include <atomic>
 #include <vector>
 
 #include "../Activity.h"
 #include "../settings/SettingsActivity.h"
 #include "components/OptionPopup.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "util/ButtonNavigator.h"
 
 class ReaderOptionsActivity final : public Activity {
@@ -35,6 +40,14 @@ class ReaderOptionsActivity final : public Activity {
   bool settingsDirty = false;
   bool stablePageNumbersAvailable = false;
 
+  using UiApp = freeink::ui::FreeInkApp<20, 4>;
+  static constexpr freeink::ui::ActionId ACTION_ROW = 1;
+  freeink::ui::GfxRendererTarget uiTarget;  // Must precede app: the app holds a reference to it.
+  UiApp app;
+  std::atomic<bool> uiReady{false};
+  int visibleRows = 1;
+  int topIndex = 0;
+
   void rebuildSettingsList();
   void setCurrentSettings();
   StrId activeSubmenuTitleId() const;
@@ -50,6 +63,9 @@ class ReaderOptionsActivity final : public Activity {
   void persistGlobalSettings();
   void beginGlobalSettingsEdit();
   void endGlobalSettingsEdit();
+  static void optionsScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildOptionsScreen(UiApp::ScreenType& screen);
 
  public:
   explicit ReaderOptionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -70,10 +86,13 @@ class ReaderOptionsActivity final : public Activity {
         beginGlobalSettingsEditContext(beginGlobalSettingsEditContext),
         endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
         endGlobalSettingsEditContext(endGlobalSettingsEditContext),
-        stablePageNumbersAvailable(stablePageNumbersAvailable) {}
+        stablePageNumbersAvailable(stablePageNumbersAvailable),
+        uiTarget(makeUiTarget(renderer)),
+        app(uiTarget, uiTarget.deviceContext()) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
+  bool allowGlobalHomeGesture() const override { return false; }
 };

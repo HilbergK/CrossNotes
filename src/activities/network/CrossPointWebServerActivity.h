@@ -17,6 +17,7 @@ class CrossPointWebServerActivity final : public Activity {
   std::string landingPath;  // NEW: path appended to QR code URL (e.g. "highlights")
   bool hasInitialNetworkMode = false;
   NetworkMode initialNetworkMode = NetworkMode::JOIN_NETWORK;
+  bool networkBootReady = false;
 
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
   bool isApMode = false;
@@ -35,7 +36,9 @@ class CrossPointWebServerActivity final : public Activity {
   int lastWifiBars = 0;
 
   void renderServerRunning() const;
+  void renderHeader() const;
   void renderWifiIndicator(int subHeaderTop) const;
+  bool exitRequested() const;
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
@@ -52,15 +55,17 @@ class CrossPointWebServerActivity final : public Activity {
         returnBookPath(std::move(returnBookPath)),
         landingPath("") {}
 
-  // Constructor with pre-selected network mode — used by goToHotspotFileTransfer etc.
+  // Pre-selected network mode — used by goToHotspotFileTransfer etc.
+  // CrossInk Notes: landingPath appends a page to the QR URL (e.g. "highlights").
   CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, NetworkMode initialNetworkMode,
-                              std::string returnBookPath = {}, std::string landingPath = "")
+                              std::string returnBookPath = {}, std::string landingPath = "",
+                              bool networkBootReady = false)
       : Activity("CrossPointWebServer", renderer, mappedInput),
         returnBookPath(std::move(returnBookPath)),
         landingPath(std::move(landingPath)),
         hasInitialNetworkMode(true),
-        initialNetworkMode(initialNetworkMode) {}
-
+        initialNetworkMode(initialNetworkMode),
+        networkBootReady(networkBootReady) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

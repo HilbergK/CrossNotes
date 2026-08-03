@@ -1,6 +1,6 @@
 ---
 title: Reader Features
-nav_order: 17
+nav_order: 5
 ---
 
 # Reader Features
@@ -18,6 +18,7 @@ Open the reader menu and select **Reader Options** to adjust settings such as:
 - Font family
 - Font size
 - Line spacing
+- Word spacing (EPUB)
 - Margins
 - Alignment
 - Image rendering
@@ -27,7 +28,8 @@ Open the reader menu and select **Reader Options** to adjust settings such as:
 Changes take effect immediately.
 
 For books that are slow to index or fail because of complex publisher styling,
-see [EPUB Render Modes](./epub-render-modes.md).
+see [EPUB Indexing Methods](./epub-indexing.md) and
+[EPUB Render Modes](./epub-render-modes.md).
 
 ## Font Sizes And Downloadable Font Ranges
 
@@ -38,7 +40,6 @@ The reader can also use SD-card font packs with selectable font-size ranges. Thi
 Related docs:
 
 - [SD Card Fonts](./sd-card-fonts.md)
-- [Font Build Variants](./font-build-variants.md)
 
 ## Dark Reader Mode
 
@@ -53,6 +54,17 @@ Dark Reader Mode can also be assigned to shortcut actions, so it can be switched
 CrossInk supports adjustable reader line spacing from compact to wide spacing.
 
 Use this when a book feels visually cramped, or when larger fonts need more vertical room to stay comfortable.
+
+## Word Spacing
+
+EPUB readers can choose from five word-spacing levels: **Normal** and levels
+**1** through **4**. Higher levels add more space between words, which can make
+text easier to scan without changing the font size or line height.
+
+Open the reader menu, then select **Reader Options > Font Options > Word
+Spacing**. The current EPUB is laid out again when you change this setting, so
+the number and positions of pages may change. Word Spacing is not available for
+TXT books.
 
 ## Guide Dots
 
@@ -107,6 +119,11 @@ You can:
 CrossInk supports EPUB text clippings from the reader. Use **Create Clipping**
 from the reader menu, select text on the current page, and save it.
 
+On button devices, move the cursor with the direction buttons, press **Select**
+at the first word, move to the last word, then press **Done**. On touchscreen
+devices, tap the first word and then the last word. You can also press and hold
+on the first word, drag across the text, and release to save the clipping.
+
 A saved clipping is used in three ways:
 
 - It appears as a highlight in the reader
@@ -117,9 +134,6 @@ The in-app clipping list is stored separately from the text export. Deleting a
 clipping from CrossInk removes the saved clipping and highlight from the device
 UI, but it does not rewrite old entries that were already appended to
 `/My Clippings.txt`.
-
-For storage paths and binary format details, see [Data Cache](./data-cache.md)
-and [File Formats](./file-formats.md).
 
 ## Reading Stats
 
@@ -134,6 +148,8 @@ Tracked stats include:
 - All-time reading stats, including total books read
 
 Recent CrossInk versions expanded this into a larger stats system, including synced totals, richer X3 stats screens, reading-streak and time charts, editable stat dates, idle-time filtering, reset controls, and all-time stats backup options.
+
+**Note**: Date-related stats require a device with a real-time clock (RTC) module. The X4 does not have an RTC module, therefore will not have as detailed stats as the X3.
 
 Reading stats can also be used as a sleep screen, including the Minimal Stats sleep screen on supported builds.
 

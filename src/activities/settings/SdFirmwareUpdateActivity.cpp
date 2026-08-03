@@ -10,6 +10,7 @@
 #include "MappedInputManager.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
@@ -186,8 +187,11 @@ void SdFirmwareUpdateActivity::performUpdate() {
 
 void SdFirmwareUpdateActivity::loop() {
   if (state == State::FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    int x = 0;
+    int y = 0;
+    if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       if (recoveryMode) {
         // Go back to picker so user can try a different .bin
         state = State::PICKING;
@@ -207,7 +211,12 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const char* headerText = recoveryMode ? tr(STR_RECOVERY_MODE) : tr(STR_SD_FIRMWARE_UPDATE);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerText);
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (state == State::FAILED && mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, headerText, false);
+  } else {
+    GUI.drawHeader(renderer, header, headerText);
+  }
 
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - lineHeight) / 2;
@@ -236,7 +245,13 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF));
   } else if (state == State::SUCCESS) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + lineHeight + metrics.verticalSpacing, tr(STR_RESTARTING_HINT));
+    const auto hintLines =
+        renderer.wrappedText(UI_10_FONT_ID, tr(STR_RESTARTING_HINT), pageWidth - metrics.contentSidePadding * 2, 3);
+    int hintY = top + lineHeight + metrics.verticalSpacing;
+    for (const auto& line : hintLines) {
+      renderer.drawCenteredText(UI_10_FONT_ID, hintY, line.c_str());
+      hintY += lineHeight;
+    }
   } else if (state == State::FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
     if (!errorMessage.empty()) {
@@ -247,7 +262,13 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
   } else {
     // PICKING / CONFIRMING: a sub-activity is on top, nothing to draw.
     if (recoveryMode) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_RECOVERY_MODE_HINT));
+      const auto hintLines = renderer.wrappedText(UI_10_FONT_ID, tr(STR_RECOVERY_MODE_HINT),
+                                                  pageWidth - metrics.contentSidePadding * 2, 3);
+      int hintY = top;
+      for (const auto& line : hintLines) {
+        renderer.drawCenteredText(UI_10_FONT_ID, hintY, line.c_str());
+        hintY += lineHeight;
+      }
     }
   }
 

@@ -129,7 +129,6 @@ inline bool saveProgress(Epub& epub, int spineIndex, int pageNumber, int pageCou
     Storage.remove(tmpPath.c_str());
     return false;
   }
-  LOG_DBG("ERS", "Progress saved: spine=%d page=%d", spineIndex, pageNumber);
   return true;
 }
 

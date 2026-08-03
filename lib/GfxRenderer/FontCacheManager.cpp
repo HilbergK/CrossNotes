@@ -64,7 +64,13 @@ void FontCacheManager::resetStats() {
 bool FontCacheManager::isScanning() const { return scanMode_ == ScanMode::Scanning; }
 
 void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::Style style) {
-  scanText_ += text;
+  if ((style & EpdFontFamily::SMALL_CAPS) != 0) {
+    for (const char* p = text; *p != '\0'; ++p) {
+      scanText_.push_back((*p >= 'a' && *p <= 'z') ? static_cast<char>(*p - ('a' - 'A')) : *p);
+    }
+  } else {
+    scanText_ += text;
+  }
   if (scanFontId_ < 0) scanFontId_ = fontId;
   const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
   const unsigned char* p = reinterpret_cast<const unsigned char*>(text);

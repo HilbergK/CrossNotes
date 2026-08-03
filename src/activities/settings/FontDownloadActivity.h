@@ -1,5 +1,9 @@
 #pragma once
 
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
+
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -67,7 +71,6 @@ class FontDownloadActivity : public Activity {
     std::string installName;
     std::string description;
     std::string languages;
-    std::vector<std::string> styles;
     std::vector<ManifestFile> files;
     size_t totalSize = 0;
     bool installed = false;
@@ -86,6 +89,7 @@ class FontDownloadActivity : public Activity {
   bool hasRetryFamily_ = false;
   bool manifestReloadNeeded_ = false;
   std::string activeDownloadFamilyName_;
+  bool fontsChanged_ = false;
 
   // Download progress
   size_t currentFileIndex_ = 0;
@@ -98,6 +102,25 @@ class FontDownloadActivity : public Activity {
   std::string errorMessage_;
   std::string errorHint_;
   bool cancelRequested_ = false;
+  // Set when a blocking download consumed Home; exit only after its file and
+  // network resources have unwound.
+  bool goHomeRequested_ = false;
+
+  // FreeInkApp hosts the family list (themed rows, touch routing); the other
+  // states keep their legacy centered-text rendering.
+  using UiApp = freeink::ui::FreeInkApp<20, 4>;
+  freeink::ui::GfxRendererTarget uiTarget_;  // must precede `app_`: the app holds a reference to it
+  UiApp app_;
+  // render() rebuilds the app's interaction table; loop() only routes touch
+  // snapshots against it while this is true (the two run on different tasks).
+  std::atomic<bool> uiReady_{false};
+  int visibleRows_ = 1;  // rows per page at the current scale; set by the screen builder
+  int topIndex_ = 0;     // viewport scroll position, decoupled from the selection
+
+  static void listScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildListScreen(UiApp::ScreenType& screen);
+  void activateSelected();
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
@@ -108,22 +131,17 @@ class FontDownloadActivity : public Activity {
   void clearManifestFamilies();
   void downloadFamily(ManifestFamily& family);
   void downloadSelectedFamily(int familyIndex);
-  void downloadBatch(bool updatesOnly);
   void returnToFamilyList();
-  void downloadAll();
   void updateAll();
   static bool computeFileCrc32(const char* path, uint32_t& outCrc);
-  bool showDownloadAllRow() const;
   bool showUpdateAllRow() const;
   int specialRowCount() const;
-  bool isDownloadAllRow(int index) const;
   bool isUpdateAllRow(int index) const;
   bool isSelectedFamilyDeletable() const;
   void promptDeleteSelectedFamily();
   void onDeleteConfirmationResult(const ActivityResult& result);
   int familyIndexFromList(int listIndex) const { return listIndex - specialRowCount(); }
   int listItemCount() const;
-  size_t totalDownloadSize() const;
   size_t totalUpdateSize() const;
   static std::string formatSize(size_t bytes);
   int fontListPageItems() const;

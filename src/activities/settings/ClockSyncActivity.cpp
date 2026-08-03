@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -95,7 +96,14 @@ void ClockSyncActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
+    finish();
+    return;
+  }
+
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
     finish();
   }
 }
@@ -107,7 +115,12 @@ void ClockSyncActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_SYNC));
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_CLOCK_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_CLOCK_SYNC));
+  }
 
   const int midY = pageHeight / 2;
 

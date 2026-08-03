@@ -71,6 +71,11 @@ bool hasClearableBookCache(const std::string& path) {
   return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path);
 }
 
+bool canSendNearby(const std::string& path) {
+  return FsHelpers::hasEpubExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasXtcExtension(path) ||
+         FsHelpers::hasPngExtension(path) || FsHelpers::hasBmpExtension(path);
+}
+
 void clearFileMetadata(const std::string& fullPath) {
   if (FsHelpers::hasEpubExtension(fullPath)) {
     Epub(fullPath, "/.crosspoint").clearCache();
@@ -82,7 +87,6 @@ void clearFileMetadata(const std::string& fullPath) {
   } else if (FsHelpers::hasTxtExtension(fullPath) || FsHelpers::hasMarkdownExtension(fullPath)) {
     BookmarkStore::deleteForFilePath(fullPath, "txt");
   }
-  LOG_DBG("BookActions", "Cleared metadata for: %s", fullPath.c_str());
 }
 
 bool clearBookCache(const std::string& fullPath) {

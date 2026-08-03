@@ -157,10 +157,6 @@ XtcError XtcParser::readHeader() {
     return XtcError::CORRUPTED_HEADER;
   }
 
-  LOG_DBG("XTC", "Header: magic=0x%08X (%s), ver=%u.%u, pages=%u, bitDepth=%u", m_header.magic,
-          (m_header.magic == XTCH_MAGIC) ? "XTCH" : "XTC", m_header.versionMajor, m_header.versionMinor,
-          m_header.pageCount, m_bitDepth);
-
   return XtcError::OK;
 }
 
@@ -174,7 +170,6 @@ XtcError XtcParser::readTitle() {
   m_file.read(titleBuf, sizeof(titleBuf) - 1);
   m_title = titleBuf;
 
-  LOG_DBG("XTC", "Title: %s", m_title.c_str());
   return XtcError::OK;
 }
 
@@ -189,7 +184,6 @@ XtcError XtcParser::readAuthor() {
   m_file.read(authorBuf, sizeof(authorBuf) - 1);
   m_author = authorBuf;
 
-  LOG_DBG("XTC", "Author: %s", m_author.c_str());
   return XtcError::OK;
 }
 
@@ -231,7 +225,6 @@ XtcError XtcParser::readFirstPageInfo() {
   m_defaultWidth = entry.width;
   m_defaultHeight = entry.height;
 
-  LOG_DBG("XTC", "Page table validated: %u pages, default %dx%d", m_header.pageCount, m_defaultWidth, m_defaultHeight);
   return XtcError::OK;
 }
 
@@ -391,7 +384,6 @@ XtcError XtcParser::readChapters() {
     LOG_DBG("XTC", "Chapter table truncated: %u available, %u loaded", static_cast<unsigned int>(chapterCount),
             static_cast<unsigned int>(MAX_XTC_CHAPTERS));
   }
-  LOG_DBG("XTC", "Chapters: %u", static_cast<unsigned int>(m_chapterCount));
   return XtcError::OK;
 }
 

@@ -15,7 +15,7 @@ static_assert(TableFragmentRow::MAX_SERIALIZED_CELLS == MAX_TABLE_CELLS_PER_ROW)
 static_assert(PageTableFragment::MAX_SERIALIZED_ROWS == MAX_TABLE_ROWS_PER_FRAGMENT);
 
 template <typename Predicate>
-void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
+void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
                                 const int fontId, const int xOffset, const int yOffset, const bool foregroundBlack,
                                 Predicate&& predicate) {
   for (const auto& element : elements) {
@@ -66,9 +66,14 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
 
 void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
                        const bool foregroundBlack) {
-  (void)foregroundBlack;
-  // Images don't use fontId or text rendering
-  imageBlock->render(renderer, xPos + xOffset, yPos + yOffset);
+  (void)fontId;
+  // Images don't use fontId for text rendering
+  imageBlock->render(renderer, xPos + xOffset, yPos + yOffset, foregroundBlack);
+}
+
+void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset,
+                                  const bool foregroundBlack) const {
+  imageBlock->renderPlaceholder(renderer, xPos + xOffset, yPos + yOffset, foregroundBlack);
 }
 
 bool PageImage::serialize(FsFile& file) {
@@ -364,6 +369,22 @@ void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffs
                              [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
 }
 
+void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                                       const bool foregroundBlack) const {
+  for (const auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      auto& pageImage = static_cast<PageImage&>(*element);
+      if (pageImage.getImageBlock().needsDecode()) {
+        pageImage.renderPlaceholder(renderer, xOffset, yOffset, foregroundBlack);
+      } else {
+        pageImage.render(renderer, fontId, xOffset, yOffset, foregroundBlack);
+      }
+    } else {
+      element->render(renderer, fontId, xOffset, yOffset, foregroundBlack);
+    }
+  }
+}
+
 bool Page::serialize(FsFile& file) const {
   const uint16_t count = elements.size();
   if (elements.size() > MAX_PAGE_ELEMENTS) {
@@ -396,7 +417,7 @@ bool Page::serialize(FsFile& file) const {
   for (uint16_t i = 0; i < fnCount; i++) {
     const auto& fn = footnotes[i];
     if (file.write(fn.number, sizeof(fn.number)) != sizeof(fn.number) ||
-        file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href)) {
+        file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href) || !serialization::tryWritePod(file, fn.linkId)) {
       LOG_ERR("PGE", "Failed to write footnote");
       return false;
     }
@@ -489,7 +510,8 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   for (uint16_t i = 0; i < fnCount; i++) {
     auto& entry = page->footnotes[i];
     if (file.read(entry.number, sizeof(entry.number)) != sizeof(entry.number) ||
-        file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href)) {
+        file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href) ||
+        !serialization::tryReadPod(file, entry.linkId)) {
       LOG_ERR("PGE", "Failed to read footnote %u", i);
       return nullptr;
     }

@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -19,10 +20,11 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ReadingStatsUtils.h"
+#include "components/TouchRegistry.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
 #include "components/icons/afternoon.h"
 #include "components/icons/book24.h"
-#include "components/icons/cover.h"
 #include "components/icons/evening.h"
 #include "components/icons/morning.h"
 #include "components/icons/night.h"
@@ -95,7 +97,7 @@ void drawMissingBookCover(const GfxRenderer& renderer, const Rect& coverRect, co
   renderer.drawRoundedRect(coverRect.x, coverRect.y, coverRect.width, coverRect.height, 1, kCoverCornerRadius, true);
 
   constexpr int iconSize = 32;
-  renderer.drawIcon(CoverIcon, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36, iconSize, iconSize);
+  drawLucideIcon(renderer, icon_image_32, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36);
 
   constexpr int textPadding = 14;
   const int textW = coverRect.width - textPadding * 2;
@@ -248,7 +250,7 @@ void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, cons
                         const float progressPercent, const bool black = true) {
   const int rightX = renderer.getScreenWidth() - contentInset(renderer) - (gpio.deviceIsX3() ? kPairInwardShiftX3 : 0);
   const int blockH = statsBlockHeight(renderer);
-  const bool showRtcStats = gpio.deviceIsX3();
+  const bool showRtcStats = halClock.isAvailable();
   const int rowCount = showRtcStats ? kStatsRowCount : kStatsRowCountX4;
   const BookReadingStats emptyStats{};
   const BookReadingStats& bookStats = stats != nullptr ? *stats : emptyStats;
@@ -477,10 +479,11 @@ void drawRightAnchoredFooterStat(const GfxRenderer& renderer, const int labelRig
 void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const GlobalReadingStats* globalStats,
                      const bool inverted = false) {
   const int inset = contentInset(renderer);
-  const int footerY = renderer.getScreenHeight() - DashboardMetrics::values.buttonHintsHeight - kFooterBottomGap;
+  const int buttonHintReserve = gpio.hasTouch() ? 0 : DashboardMetrics::values.buttonHintsHeight;
+  const int footerY = renderer.getScreenHeight() - buttonHintReserve - kFooterBottomGap;
   const int centerY = std::max(coverRect.y + coverRect.height + 120, footerY);
 
-  if (gpio.deviceIsX4()) {
+  if (!halClock.isAvailable()) {
     char totalTime[40];
     char booksRead[16];
     const uint32_t totalReadingSeconds = globalStats != nullptr ? globalStats->totalReadingSeconds : 0;
@@ -504,7 +507,7 @@ void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const G
   drawIconLabel(renderer, StreakIcon, coverRect.x, centerY, streakBuf, leftTextW, inverted);
 
   const char* readerLabel = readerTypeLabel(globalStats);
-  const int rightX = renderer.getScreenWidth() - inset - kPairInwardShiftX3;
+  const int rightX = renderer.getScreenWidth() - inset - (gpio.deviceIsX3() ? kPairInwardShiftX3 : 0);
   const int maxReaderTextW = std::max(1, renderer.getScreenWidth() / 2 - inset - kFooterIconSize - kFooterIconTextGap);
   drawRightAlignedIconLabel(renderer, readerTypeIcon(globalStats), rightX, centerY, readerLabel, maxReaderTextW,
                             inverted);
@@ -557,6 +560,7 @@ void DashboardTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const
     coverBufferStored = storeCoverBuffer();
     coverRendered = coverBufferStored;
   }
+  TouchRegistry::getInstance().add(coverRect, 0, TouchRegistry::Cover);
 
   drawDashboardStats(renderer, coverRect, stats, progressPercent);
   drawBookText(renderer, coverRect, recentBooks[0], currentChapterTitle);

@@ -44,7 +44,6 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     recentBooks.push_back(book);
   }
 
-  LOG_DBG("RBS", "Recent books loaded from file (%d entries)", getCount());
   return true;
 }
 
@@ -136,14 +135,12 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     lastBookFileName = path.substr(lastSlash + 1);
   }
 
-  LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
-
   // If epub, try to load the metadata for title/author and cover.
   // Use buildIfMissing=false to avoid heavy epub loading on boot; getTitle()/getAuthor() may be
   // blank until the book is opened, and entries with missing title are omitted from recent list.
   if (FsHelpers::hasEpubExtension(lastBookFileName)) {
     Epub epub(path, "/.crosspoint");
-    epub.load(false, true);
+    epub.load(false, true, Epub::XLocationLoadMode::Skip);
     return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
   } else if (FsHelpers::hasXtcExtension(lastBookFileName)) {
     // Handle XTC file
@@ -241,6 +238,5 @@ bool RecentBooksStore::loadFromBinaryFile() {
     return false;
   }
 
-  LOG_DBG("RBS", "Recent books loaded from binary file (%d entries)", static_cast<int>(recentBooks.size()));
   return true;
 }

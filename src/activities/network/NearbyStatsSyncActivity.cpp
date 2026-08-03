@@ -1,5 +1,7 @@
 #include "NearbyStatsSyncActivity.h"
 
+#include "components/TouchHeaderBackButton.h"
+
 #ifdef SIMULATOR
 
 #include <GfxRenderer.h>
@@ -22,7 +24,9 @@ void NearbyStatsSyncActivity::onEnter() {
 void NearbyStatsSyncActivity::onExit() { Activity::onExit(); }
 
 void NearbyStatsSyncActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) exitViaBack();
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back))
+    exitViaBack();
 }
 
 void NearbyStatsSyncActivity::render(RenderLock&&) {
@@ -31,7 +35,12 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_NEARBY_STATS_SYNC));
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_NEARBY_STATS_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_NEARBY_STATS_SYNC));
+  }
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NEARBY_STATS_SIMULATOR_UNAVAILABLE), true,
                             EpdFontFamily::BOLD);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
@@ -223,7 +232,8 @@ void NearbyStatsSyncActivity::onExit() {
 void NearbyStatsSyncActivity::loop() {
   processEvents();
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     exitViaBack();
     return;
   }
@@ -567,7 +577,12 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_NEARBY_STATS_SYNC));
+  const Rect header{0, metrics.topPadding, pageWidth, TouchHeaderBackButton::height(metrics, mappedInput)};
+  if (mappedInput.hasTouchHardware()) {
+    TouchHeaderBackButton::draw(renderer, header, tr(STR_NEARBY_STATS_SYNC), false);
+  } else {
+    GUI.drawHeader(renderer, header, tr(STR_NEARBY_STATS_SYNC));
+  }
 
   const int centerY = pageHeight / 2 - 20;
   std::string primary;
@@ -633,7 +648,8 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
 void NearbyStatsSyncActivity::renderReady(const std::string& primary, const std::string& detailPrimary,
                                           const std::string& detailSecondary) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) + metrics.verticalSpacing;
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   int y = contentTop + 70;
 
