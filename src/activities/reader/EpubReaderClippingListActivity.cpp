@@ -24,6 +24,10 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr fui::ActionId ACTION_ROW = 1;
+// CrossInk Notes: face used for the row subtitle (tag + chapter + note). Kept
+// as a single constant because it is bound to the list's FONT_SMALL slot AND
+// used to measure/truncate the text, which must agree.
+constexpr int SUBTITLE_FONT_ID = SMALL_FONT_ID;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
 constexpr int DETAIL_BOTTOM_RESERVE = 55;
@@ -680,10 +684,14 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
-  // CrossInk Notes: the subtitle carries tag + chapter + note, so pin it to the
-  // theme's small text. configureUiList leaves subtitleText at its default,
-  // which also means measuring against it below needs a real font id.
-  props.subtitleText = screen.theme().smallText;
+  // CrossInk Notes: the subtitle carries tag + chapter + note, so render it in
+  // a genuinely smaller face to fit more in. FreeInkUI addresses fonts by slot
+  // (FONT_SMALL/BODY/TITLE), and uiScaleSpec() binds SMALL to the same font as
+  // BODY — so rebind this activity's SMALL slot and keep the row label on BODY.
+  // uiTarget belongs to this activity, so no other screen is affected.
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_SMALL, SUBTITLE_FONT_ID);
+  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+  props.subtitleText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.subtitleText.bold = false;
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
@@ -731,7 +739,12 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
       if (notePart.empty()) {
         subtitle = tagPart + chapter;  // no note text: the chapter gets the rest of the line
       } else {
-        const auto fontId = props.subtitleText.font;
+        // NOTE: props.subtitleText.font is a FreeInkUI *slot* (FONT_SMALL == 0),
+        // not a GfxRenderer font id. Passing the slot to getTextWidth measures
+        // against id 0 — the "not found" sentinel — which returns zero for every
+        // string, so nothing was ever truncated and the widget clipped the tail.
+        // Measure with the real font bound to that slot.
+        const int fontId = SUBTITLE_FONT_ID;
         // The list insets each row by sidePadding (default 8) on BOTH sides, so
         // the drawable width is bounds.width - 16; a few px of slack keeps the
         // widget from clipping our tail.
