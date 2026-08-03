@@ -723,14 +723,26 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
       if (notePart.empty()) {
         subtitle = chapter;  // no note: the chapter gets the whole line
       } else {
-        // Measure with a small margin so a slightly larger theme subtitle font
-        // still fits without the widget clipping our tail (the chapter).
-        constexpr int kSeparatorPad = 12;
-        const int available = std::max(0, static_cast<int>(bounds.width) * 9 / 10 - kSeparatorPad);
-        const std::string chapterPart = renderer.truncatedText(SMALL_FONT_ID, chapter, available * 2 / 5);
-        const std::string tail = " - " + chapterPart;
-        const int noteBudget = std::max(0, available - renderer.getTextWidth(SMALL_FONT_ID, tail.c_str()));
-        subtitle = renderer.truncatedText(SMALL_FONT_ID, notePart.c_str(), noteBudget) + tail;
+        // Chapter first, taking only the width it actually needs; the note
+        // fills the remainder. The chapter is capped at 60% only when it is
+        // long enough to crowd the note out entirely, so short chapters are
+        // never shortened. Measured in the list's own subtitle font, and the
+        // note (drawn last) is what gets clipped if anything overflows.
+        const auto fontId = props.subtitleText.font;
+        const int available = std::max(0, static_cast<int>(bounds.width) - 8);
+        const std::string separator = "  -  ";
+        std::string chapterPart = chapter;
+        const int chapterCap = available * 3 / 5;
+        if (renderer.getTextWidth(fontId, chapterPart.c_str()) > chapterCap) {
+          chapterPart = renderer.truncatedText(fontId, chapter, chapterCap);
+        }
+        const int remaining =
+            available - renderer.getTextWidth(fontId, (chapterPart + separator).c_str());
+        if (remaining > renderer.getTextWidth(fontId, "...")) {
+          subtitle = chapterPart + separator + renderer.truncatedText(fontId, notePart.c_str(), remaining);
+        } else {
+          subtitle = chapterPart;  // no usable room left for the note
+        }
       }
       item.subtitle = subtitle.c_str();
     }
