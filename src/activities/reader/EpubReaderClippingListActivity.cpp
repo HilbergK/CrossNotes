@@ -680,6 +680,11 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
+  // CrossInk Notes: the subtitle carries tag + chapter + note, so pin it to the
+  // theme's small text. configureUiList leaves subtitleText at its default,
+  // which also means measuring against it below needs a real font id.
+  props.subtitleText = screen.theme().smallText;
+  props.subtitleText.bold = false;
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
@@ -706,43 +711,40 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     if (clipping) {
       const Note* note = NOTES.getNoteForClipping(clipping->spineIndex, clipping->startPage, clipping->startWordIndex,
                                                   clipping->timestamp);
+      // Row 2 reads: "[tag] Chapter - note". The tag is short and always fits;
+      // the chapter and the note share what is left. The note is guaranteed a
+      // slice of the line so a long chapter can never squeeze it out entirely,
+      // and the chapter is only shortened when it would exceed its own share.
+      std::string tagPart;
       std::string notePart;
       if (note) {
         if (note->tag != 0) {
-          notePart += '[';
-          notePart += note->tag;
-          notePart += "] ";
+          tagPart += '[';
+          tagPart += note->tag;
+          tagPart += "] ";
         }
         if (!note->text.empty()) {
-          std::string noteFlat;
-          buildOneLineSnippetText(note->text, noteFlat);
-          notePart += noteFlat;
+          buildOneLineSnippetText(note->text, notePart);
         }
       }
       const char* chapter = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
       if (notePart.empty()) {
-        subtitle = chapter;  // no note: the chapter gets the whole line
+        subtitle = tagPart + chapter;  // no note text: the chapter gets the rest of the line
       } else {
-        // Chapter first, taking only the width it actually needs; the note
-        // fills the remainder. The chapter is capped at 60% only when it is
-        // long enough to crowd the note out entirely, so short chapters are
-        // never shortened. Measured in the list's own subtitle font, and the
-        // note (drawn last) is what gets clipped if anything overflows.
         const auto fontId = props.subtitleText.font;
         const int available = std::max(0, static_cast<int>(bounds.width) - 8);
         const std::string separator = "  -  ";
+        const int afterTag = std::max(0, available - renderer.getTextWidth(fontId, tagPart.c_str()));
+        const int separatorWidth = renderer.getTextWidth(fontId, separator.c_str());
+        // Reserve ~40% of the remaining line for the note before sizing the chapter.
+        const int chapterMax = std::max(0, afterTag - separatorWidth - afterTag * 2 / 5);
         std::string chapterPart = chapter;
-        const int chapterCap = available * 3 / 5;
-        if (renderer.getTextWidth(fontId, chapterPart.c_str()) > chapterCap) {
-          chapterPart = renderer.truncatedText(fontId, chapter, chapterCap);
+        if (renderer.getTextWidth(fontId, chapterPart.c_str()) > chapterMax) {
+          chapterPart = renderer.truncatedText(fontId, chapter, chapterMax);
         }
-        const int remaining =
-            available - renderer.getTextWidth(fontId, (chapterPart + separator).c_str());
-        if (remaining > renderer.getTextWidth(fontId, "...")) {
-          subtitle = chapterPart + separator + renderer.truncatedText(fontId, notePart.c_str(), remaining);
-        } else {
-          subtitle = chapterPart;  // no usable room left for the note
-        }
+        const int noteBudget =
+            std::max(0, afterTag - renderer.getTextWidth(fontId, (chapterPart + separator).c_str()));
+        subtitle = tagPart + chapterPart + separator + renderer.truncatedText(fontId, notePart.c_str(), noteBudget);
       }
       item.subtitle = subtitle.c_str();
     }
