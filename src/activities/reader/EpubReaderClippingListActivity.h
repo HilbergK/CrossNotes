@@ -47,6 +47,9 @@ class EpubReaderClippingListActivity final : public Activity {
   std::vector<freeink::ui::ListItem> uiItems;
   std::array<std::string, 20> uiRawText;
   std::array<std::string, 20> uiLabels;
+  // CrossInk Notes: per-row subtitle buffer ("[tag] note - Chapter"). Persistent
+  // because fui::ListItem::subtitle holds a borrowed const char*.
+  std::array<std::string, 20> uiSubtitles;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);

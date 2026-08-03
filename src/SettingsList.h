@@ -804,6 +804,7 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     }
     return v;
   }();
+
   return baseList;
 }
 
@@ -852,49 +853,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.insert(insertPos, buildDictionarySetting(dictRegistry));
   }
   return v;
-}
-
-// Visit every effective setting entry WITHOUT deep-copying the whole list.
-// Used by the web settings API: the full per-request copy of ~66 SettingInfo
-// entries (each holding several vectors and std::function captures) was a
-// large heap-churn spike in AP mode with the WiFi stack loaded, and could
-// abort the firmware on a fragmented heap. Only the handful of entries that
-// differ per device/registry are built on demand.
-template <typename Fn>
-inline void forEachSettingForWeb(const SdCardFontRegistry* registry, Fn&& fn) {
-  const auto& base = getBaseSettingsList();
-  const bool hasSdFonts = registry != nullptr && registry->getFamilyCount() > 0;
-
-  SettingInfo fontFamilyOverride;
-  SettingInfo fontSizeOverride;
-  if (hasSdFonts) {
-    fontFamilyOverride = buildFontFamilySetting(registry);
-    fontSizeOverride = buildFontSizeSetting(registry);
-  }
-
-  SettingInfo sleepScreenOverride;
-  bool hasSleepScreenOverride = false;
-  if (!gpio.deviceIsX3()) {
-    const auto it = std::find_if(base.begin(), base.end(),
-                                 [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
-    if (it != base.end()) {
-      sleepScreenOverride = *it;
-      removeEnumRawValue(sleepScreenOverride, static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP));
-      hasSleepScreenOverride = true;
-    }
-  }
-
-  for (const auto& s : base) {
-    if (hasSdFonts && s.nameId == StrId::STR_FONT_FAMILY) {
-      fn(fontFamilyOverride);
-    } else if (hasSdFonts && s.nameId == StrId::STR_FONT_SIZE) {
-      fn(fontSizeOverride);
-    } else if (hasSleepScreenOverride && s.nameId == StrId::STR_SLEEP_SCREEN) {
-      fn(sleepScreenOverride);
-    } else {
-      fn(s);
-    }
-  }
 }
 
 inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector<SettingInfo>& allSettings) {

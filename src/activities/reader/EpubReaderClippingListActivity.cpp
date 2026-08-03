@@ -696,7 +696,35 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     fui::ListItem& item = uiItems[static_cast<size_t>(i)];
     item = fui::ListItem{};
     item.label = uiLabels[slot].c_str();
-    if (clipping) item.subtitle = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+    // CrossInk Notes: the second line shows this highlight's tag and note, so
+    // they are visible without opening the clipping. The chapter is kept after
+    // them (upstream shows the chapter alone here).
+    std::string& subtitle = uiSubtitles[slot];
+    subtitle.clear();
+    if (clipping) {
+      const Note* note = NOTES.getNoteForClipping(clipping->spineIndex, clipping->startPage, clipping->startWordIndex,
+                                                  clipping->timestamp);
+      if (note) {
+        if (note->tag != 0) {
+          subtitle += '[';
+          subtitle += note->tag;
+          subtitle += "] ";
+        }
+        if (!note->text.empty()) {
+          std::string noteFlat;
+          buildOneLineSnippetText(note->text, noteFlat);
+          subtitle += noteFlat;
+        }
+      }
+      const char* chapter = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+      if (subtitle.empty()) {
+        subtitle = chapter;
+      } else {
+        subtitle += " - ";
+        subtitle += chapter;
+      }
+      item.subtitle = subtitle.c_str();
+    }
     item.actionValue = static_cast<int16_t>(i);
   }
   screen.list(props);
@@ -798,9 +826,9 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const Rect header = clippingHeaderRect(safe, metrics, mappedInput);
   if (mappedInput.hasTouchHardware()) {
-    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_CLIPPINGS), true);
+    TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_NOTES), true);
   } else {
-    GUI.drawHeader(renderer, header, tr(STR_CLIPPINGS), nullptr, true);
+    GUI.drawHeader(renderer, header, tr(STR_NOTES), nullptr, true);
   }
   uiReady = false;
   app.render();
