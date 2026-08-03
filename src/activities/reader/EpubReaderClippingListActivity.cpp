@@ -697,31 +697,40 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     item = fui::ListItem{};
     item.label = uiLabels[slot].c_str();
     // CrossInk Notes: the second line shows this highlight's tag and note, so
-    // they are visible without opening the clipping. The chapter is kept after
-    // them (upstream shows the chapter alone here).
+    // they are visible without opening the clipping, followed by the chapter
+    // (upstream shows the chapter alone here). Both compete for one line, so
+    // the chapter is reserved a slice of the width and the note is truncated
+    // into whatever is left — that way neither can push the other off screen.
     std::string& subtitle = uiSubtitles[slot];
     subtitle.clear();
     if (clipping) {
       const Note* note = NOTES.getNoteForClipping(clipping->spineIndex, clipping->startPage, clipping->startWordIndex,
                                                   clipping->timestamp);
+      std::string notePart;
       if (note) {
         if (note->tag != 0) {
-          subtitle += '[';
-          subtitle += note->tag;
-          subtitle += "] ";
+          notePart += '[';
+          notePart += note->tag;
+          notePart += "] ";
         }
         if (!note->text.empty()) {
           std::string noteFlat;
           buildOneLineSnippetText(note->text, noteFlat);
-          subtitle += noteFlat;
+          notePart += noteFlat;
         }
       }
       const char* chapter = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
-      if (subtitle.empty()) {
-        subtitle = chapter;
+      if (notePart.empty()) {
+        subtitle = chapter;  // no note: the chapter gets the whole line
       } else {
-        subtitle += " - ";
-        subtitle += chapter;
+        // Measure with a small margin so a slightly larger theme subtitle font
+        // still fits without the widget clipping our tail (the chapter).
+        constexpr int kSeparatorPad = 12;
+        const int available = std::max(0, static_cast<int>(bounds.width) * 9 / 10 - kSeparatorPad);
+        const std::string chapterPart = renderer.truncatedText(SMALL_FONT_ID, chapter, available * 2 / 5);
+        const std::string tail = " - " + chapterPart;
+        const int noteBudget = std::max(0, available - renderer.getTextWidth(SMALL_FONT_ID, tail.c_str()));
+        subtitle = renderer.truncatedText(SMALL_FONT_ID, notePart.c_str(), noteBudget) + tail;
       }
       item.subtitle = subtitle.c_str();
     }
