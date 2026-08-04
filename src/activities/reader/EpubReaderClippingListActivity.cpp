@@ -196,16 +196,30 @@ void EpubReaderClippingListActivity::rebuildVisibleClippings() {
     }
     visibleClippings.push_back(static_cast<uint16_t>(i));
   }
+  // Offer the filter row only when there is something to choose between: more
+  // than one tag in use (or a filter already applied, so it can be cleared).
+  std::vector<char> tags;
+  for (size_t i = 0; i < total; ++i) {
+    const Clipping* c = CLIPPINGS.clippingAt(i);
+    if (!c) continue;
+    const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
+    if (note == nullptr || note->tag == 0) continue;
+    if (std::find(tags.begin(), tags.end(), note->tag) == tags.end()) tags.push_back(note->tag);
+  }
+  showFilterRow = tags.size() > 1 || tagFilter != 0;
+  filterRowLabel = std::string(tr(STR_FILTER_BY_TAG)) + ":  " +
+                   (tagFilter != 0 ? std::string(1, tagFilter) : std::string(tr(STR_ALL_TAGS)));
+
   const int count = visibleCount();
   if (selectedIndex >= count) selectedIndex = count > 0 ? count - 1 : 0;
   if (selectedIndex < 0) selectedIndex = 0;
   if (topIndex > selectedIndex) topIndex = selectedIndex;
-  uiItems.resize(visibleClippings.size());
+  uiItems.resize(static_cast<size_t>(visibleCount()));
 }
 
 void EpubReaderClippingListActivity::onEnter() {
   Activity::onEnter();
-  selectedIndex = 0;
+  selectedIndex = 0;  // moved past the filter row after the list is built
   topIndex = 0;
   visibleRows = 1;
   uiReady = false;
@@ -220,6 +234,8 @@ void EpubReaderClippingListActivity::onEnter() {
     NOTES.loadForBook(CLIPPINGS.getBookFilePath().c_str(), "epub");
   }
   rebuildVisibleClippings();
+  selectedIndex = filterRowOffset();  // start on the first clipping
+  if (selectedIndex >= visibleCount()) selectedIndex = std::max(0, visibleCount() - 1);
   requestUpdate();
 }
 
@@ -266,6 +282,7 @@ void EpubReaderClippingListActivity::closeDetail() {
 }
 
 void EpubReaderClippingListActivity::jumpToSelectedClipping() {
+  if (isFilterRow(selectedIndex)) return;
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
   const Clipping* clipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
@@ -276,6 +293,10 @@ void EpubReaderClippingListActivity::jumpToSelectedClipping() {
 }
 
 void EpubReaderClippingListActivity::openSelectedDetail() {
+  if (isFilterRow(selectedIndex)) {
+    showTagFilterMenu();
+    return;
+  }
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
   std::string text;
@@ -334,6 +355,7 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
 }
 
 void EpubReaderClippingListActivity::deleteSelectedClipping() {
+  if (isFilterRow(selectedIndex)) return;
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
   // Remove the clipping's note/tag along with it — otherwise the note record
@@ -411,6 +433,10 @@ void EpubReaderClippingListActivity::showTagFilterMenu() {
 
 void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreInitialConfirmRelease) {
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
+  if (isFilterRow(selectedIndex)) {
+    showTagFilterMenu();
+    return;
+  }
 
   const Clipping* selectedClipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
   if (!selectedClipping) return;
@@ -842,6 +868,18 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const int end = std::min(static_cast<int>(count), topIndex + visibleRows);
   for (int i = topIndex; i < end; ++i) {
     const size_t slot = static_cast<size_t>(i - topIndex);
+    if (isFilterRow(i)) {
+      // The filter row: a normal selectable row so it can be reached by
+      // scrolling up, with no chapter or note line beneath it.
+      uiLabels[slot] = filterRowLabel;
+      uiSubtitles[slot].clear();
+      uiNotes[slot].clear();
+      fui::ListItem& filterItem = uiItems[static_cast<size_t>(i)];
+      filterItem = fui::ListItem{};
+      filterItem.label = uiLabels[slot].c_str();
+      filterItem.actionValue = static_cast<int16_t>(i);
+      continue;
+    }
     uiRawText[slot].clear();
     CLIPPINGS.readClippingText(storeIndexFor(i), uiRawText[slot]);
     buildOneLineSnippetText(uiRawText[slot], uiLabels[slot]);

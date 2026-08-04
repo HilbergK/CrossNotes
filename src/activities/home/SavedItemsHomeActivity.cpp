@@ -100,7 +100,8 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
   // file, read once here rather than per frame.
   for (auto& b : books) {
     b.noteCount = NoteStore::countForFilePath(b.bookPath);
-    b.subtitle = b.bookAuthor;
+    // The author has its own line now, so this holds the counts alone.
+    b.subtitle.clear();
     const auto append = [&b](const std::string& part) {
       if (!b.subtitle.empty()) b.subtitle += "  -  ";
       b.subtitle += part;
@@ -249,7 +250,7 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   for (size_t i = 0; i < books.size(); ++i) {
     fui::ListItem item;
     item.label = books[i].bookTitle.c_str();
-    if (!books[i].subtitle.empty()) item.subtitle = books[i].subtitle.c_str();
+    if (!books[i].bookAuthor.empty()) item.subtitle = books[i].bookAuthor.c_str();
     item.actionValue = static_cast<int16_t>(i);
     items.push_back(item);
   }
@@ -271,12 +272,71 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.subtitleText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.subtitleText.bold = false;
+  // CrossInk Notes: the counts are a third line drawn in the row gap — the same
+  // arrangement the clipping list uses. Keeping them out of the subtitle means a
+  // long author name can no longer push them off the row.
+  countLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int labelLineHeight = renderer.getLineHeight(uiScaleSpec().bodyFontId);
+  constexpr int kRowPadding = 6;
+  int rowHeight = labelLineHeight + countLineHeight + kRowPadding;
+  if (mappedInput.hasTouchHardware()) {
+    rowHeight = std::max(rowHeight, static_cast<int>(uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle)));
+  }
+  props.rowHeight = static_cast<int16_t>(rowHeight);
+  props.rowGap = static_cast<int16_t>(countLineHeight + kRowPadding);
+
+  // No row background on any state: render() inverts the whole entry instead, so
+  // the highlight covers the counts line too.
+  fui::StyleSet rowStyles;
+  rowStyles.normal.background = fui::Paint::none();
+  rowStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+  rowStyles.selected = rowStyles.normal;
+  rowStyles.focused = rowStyles.normal;
+  rowStyles.active = rowStyles.normal;
+  rowStyles.disabled = rowStyles.normal;
+  rowStyles.explicitlySet = true;
+  props.rowStyles = rowStyles;
+
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(books.size()));
   props.topIndex = static_cast<uint16_t>(topIndex);
+
+  // Mirror the widget's own row geometry (theme side padding, row inset and the
+  // scroll track it only reserves while overflowing) so the third line lines up.
+  {
+    const auto& th = screen.theme();
+    const int rowInset = th.listInset < 0 ? 0 : th.listInset;
+    const int sidePad = th.listSidePadding < 0 ? 8 : th.listSidePadding;
+    const int scrollW = th.listScrollWidth < 0 ? 3 : th.listScrollWidth;
+    const int scrollIns = th.listScrollInset < 0 ? 0 : th.listScrollInset;
+    const bool scrollLeft = th.listScrollSide == 1;
+    int areaX = static_cast<int>(bounds.x) + rowInset;
+    int areaW = static_cast<int>(bounds.width) - rowInset * 2;
+    if (static_cast<int>(books.size()) > visibleRows && scrollW > 0) {
+      const int needed = scrollW + scrollIns + 2;
+      if (rowInset < needed) {
+        const int cut = needed - rowInset;
+        areaW -= cut;
+        if (scrollLeft) areaX += cut;
+      }
+    }
+    rowFillLeft = areaX;
+    rowFillWidth = areaW;
+    countTextLeft = areaX + sidePad;
+    countMaxWidth = std::max(0, areaW - sidePad * 2);
+  }
+
+  // Counts for the rows about to be drawn.
+  const int end = std::min(static_cast<int>(books.size()), topIndex + visibleRows);
+  for (int i = topIndex; i < end; ++i) {
+    const size_t slot = static_cast<size_t>(i - topIndex);
+    if (slot >= uiCounts.size()) break;
+    uiCounts[slot] = books[static_cast<size_t>(i)].subtitle;
+  }
+
   screen.list(props);
 }
 
@@ -293,6 +353,28 @@ void SavedItemsHomeActivity::render(RenderLock&&) {
   uiReady = false;
   app.render();
   uiReady = true;
+
+  // CrossInk Notes: third line (the counts), drawn in the row gap, then the
+  // selection applied as one inverted block over the whole entry — the widget
+  // paints no row background, so nothing here has a seam to line up with.
+  if (listRowStep > 0 && countLineHeight > 0) {
+    const int total = static_cast<int>(books.size());
+    const int end = std::min(total, topIndex + visibleRows);
+    for (int i = topIndex; i < end; ++i) {
+      const size_t slot = static_cast<size_t>(i - topIndex);
+      if (slot >= uiCounts.size() || uiCounts[slot].empty()) continue;
+      const int rowY = listTop + static_cast<int>(slot) * listRowStep;
+      const int lineY = rowY + listRowHeight + 2;
+      if (lineY + countLineHeight > listBottom) break;
+      const std::string line = renderer.truncatedText(SMALL_FONT_ID, uiCounts[slot].c_str(), countMaxWidth);
+      renderer.drawText(SMALL_FONT_ID, countTextLeft, lineY, line.c_str(), true);
+    }
+    if (selectedIndex >= topIndex && selectedIndex < end) {
+      const int rowY = listTop + (selectedIndex - topIndex) * listRowStep;
+      const int height = std::min(listRowStep - 2, listBottom - rowY);
+      if (height > 0) renderer.invertRect(rowFillLeft, rowY, rowFillWidth, height);
+    }
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

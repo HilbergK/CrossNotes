@@ -68,11 +68,21 @@ class EpubReaderClippingListActivity final : public Activity {
   char tagFilter = 0;
   OptionPopup optionPopup;
 
+  // A filter row sits above the clippings when the book uses more than one tag,
+  // so the filter is reachable by scrolling up instead of through the menu.
+  // Every row index below is a *display* row: subtract filterRowOffset() to get
+  // the position within visibleClippings.
+  bool showFilterRow = false;
+  std::string filterRowLabel;
+
   void rebuildVisibleClippings();
-  int visibleCount() const { return static_cast<int>(visibleClippings.size()); }
+  int filterRowOffset() const { return showFilterRow ? 1 : 0; }
+  bool isFilterRow(int row) const { return showFilterRow && row == 0; }
+  int visibleCount() const { return static_cast<int>(visibleClippings.size()) + filterRowOffset(); }
   size_t storeIndexFor(int row) const {
-    return (row >= 0 && row < static_cast<int>(visibleClippings.size()))
-               ? static_cast<size_t>(visibleClippings[static_cast<size_t>(row)])
+    const int i = row - filterRowOffset();
+    return (i >= 0 && i < static_cast<int>(visibleClippings.size()))
+               ? static_cast<size_t>(visibleClippings[static_cast<size_t>(i)])
                : 0;
   }
   void showTagFilterMenu();

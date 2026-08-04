@@ -4,6 +4,7 @@
 #include <FreeInkUIGfxRenderer.h>
 
 #include <atomic>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -44,6 +45,16 @@ class SavedItemsHomeActivity final : public Activity {
   std::atomic<bool> uiReady{false};
   int visibleRows = 1;
   int topIndex = 0;
+  // CrossInk Notes: counts get their own third line, drawn in the row gap, so a
+  // long author can no longer truncate them away. Geometry is resolved from the
+  // theme in buildListScreen() and used by render().
+  std::array<std::string, 20> uiCounts;
+  int countLineHeight = 0;
+  int countTextLeft = 0;
+  int countMaxWidth = 0;
+  int rowFillLeft = 0;
+  int rowFillWidth = 0;
+
   int listTop = 0;
   int listBottom = 0;
   int listRowHeight = 0;
