@@ -1,8 +1,8 @@
 # CrossNotes
 
-A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0.1) which is a fork of CrossPoint. CrossNotes adds a phone-connected note-taking system for the Xteink X4 / X3.
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0.1) which is a fork of CrossPoint. CrossNotes adds a browser-connected note-taking system for the Xteink X4 / X3.
 
-Highlight a passage, tag it, then open a page on your phone (over the device's own Wi-Fi hotspot) to read your highlights and type notes. The notes are stored on the device and shown right alongside the highlight.
+Highlight a passage, tag it, then open a page in any browser — phone, tablet, laptop — over the device's own Wi-Fi hotspot to read your highlights and type notes. The notes are stored on the device and shown right alongside the highlight.
 
 ## What it adds
 
@@ -10,10 +10,10 @@ Highlight a passage, tag it, then open a page on your phone (over the device's o
 - Tag picker after every highlight — `!` `?` `*` `~` `+` `=` `#` `<` `>` or no tag, plus a "Write a note…" option using the built-in keyboard
 - Tags and note previews shown in the clipping list and detail view
 - **Notes and Bookmarks** home entry — browse every book with highlights or bookmarks; Notes and Bookmarks are separate lists per book
-- **Phone Notes** home shortcut — starts the hotspot and shows a QR code straight to the notes page on your phone
+- **Notes Connect** home shortcut — starts the hotspot and shows a QR code (and the address to type) straight to the notes page
 - Edit Tag / Edit Note / Delete available from the clipping menu (delete asks for confirmation)
 
-**On your phone (just the browser)**
+**In your browser (phone, tablet or computer)**
 - `/highlights` page: read each highlight, set its tag from a dropdown, and type a full note next to it
 - **Export Notes** — download all of a book's highlights, tags, and notes as a Markdown file
 - **Screenshots** tab: gallery of device screenshots with one-tap download or delete
@@ -22,7 +22,7 @@ Highlight a passage, tag it, then open a page on your phone (over the device's o
 
 1. Highlight a passage in the reader
 2. Tag it (or skip, or write a note directly) — reading resumes immediately
-3. Home → **Phone Notes** → scan the QR code with your phone
+3. Home → **Notes Connect** → scan the QR code, or open the shown address on any device
 4. Read your highlights and type notes; they save straight to the device
 
 ## Screenshots
@@ -31,7 +31,7 @@ Highlight a passage, tag it, then open a page on your phone (over the device's o
 <tr>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/home-menu.jpg" width="220"><br>
-<sub>Home menu — <b>Notes and Bookmarks</b>, <b>Phone Notes</b></sub>
+<sub>Home menu — <b>Notes and Bookmarks</b>, <b>Notes Connect</b></sub>
 </td>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/notes-and-bookmarks.jpg" width="220"><br>

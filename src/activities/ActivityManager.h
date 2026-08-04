@@ -98,7 +98,7 @@ class ActivityManager {
   void goToJoinNetworkFileTransfer(const std::string& returnBookPath = {});
   void goToHotspotFileTransfer(const std::string& returnBookPath = {});
   bool resumeFileTransferFromNetworkBoot(uint32_t payload);
-  void goToQuickNotes();  // CrossInk Notes — "Phone Notes": hotspot + QR straight to notes page
+  void goToQuickNotes();  // CrossInk Notes — "Notes Connect": hotspot + QR straight to notes page
   void goToNearbyStatsSync();
   void goToNearbyBookSend(std::string path, bool returnToReader);
   void goToNearbyBookReceive();

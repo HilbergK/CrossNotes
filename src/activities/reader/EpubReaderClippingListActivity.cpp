@@ -41,7 +41,7 @@ constexpr unsigned long CLIPPING_DELETE_HOLD_MS = 1000;
 // but a very long note (e.g. written on the phone, up to kNoteTextMax)
 // can take long enough to trip the watchdog. Block on-device editing above
 // this length rather than risk a reboot; such notes are still fully
-// editable from Phone Notes. Kept low (not just under whatever threshold
+// editable from Notes Connect. Kept low (not just under whatever threshold
 // happened not to crash) since typing on-device is slow anyway — long
 // notes belong on the phone regardless of the crash risk.
 constexpr size_t EDIT_NOTE_MAX_LENGTH = 250;

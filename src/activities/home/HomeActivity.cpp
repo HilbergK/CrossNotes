@@ -57,7 +57,7 @@ enum class HomeMenuAction {
   ReadingStats,
   Bookmarks,
   FileTransfer,
-  QuickNotes,  // CrossInk Notes — "Phone Notes" hotspot + QR
+  QuickNotes,  // CrossInk Notes — "Notes Connect" hotspot + QR
   Settings,
 };
 
@@ -272,7 +272,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
-  items.push({"Phone Notes", Transfer, HomeMenuAction::QuickNotes});
+  items.push({"Notes Connect", Transfer, HomeMenuAction::QuickNotes});
   items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});
 }
 
@@ -591,7 +591,7 @@ static_assert(HomeActivity::kMaxCachedBooks >= LyraCarouselMetrics::values.homeR
 
 int HomeActivity::getMenuItemCount() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int count = 5;  // File Browser, Recents, File transfer, Phone Notes, Settings
+  int count = 5;  // File Browser, Recents, File transfer, Notes Connect, Settings
   if (!metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     count += getVisibleRecentBookCount();
   } else if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
