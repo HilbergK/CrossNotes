@@ -701,19 +701,22 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   // room for the third line, which render() draws itself. The widget centres
   // the label+subtitle block, so the extra height is split above and below —
   // reserve two line heights to leave a full line clear at the bottom.
-  // Size the row from the three lines it actually holds rather than from
-  // uiListRowHeight(), which already carries padding for a two-line row and
-  // would leave the list looking sparse. The widget centres the label+subtitle
-  // block, so the extra height is split above and below: reserving two note
-  // lines leaves exactly one clear at the bottom. Touch builds keep the theme's
-  // taller row so tap targets stay usable.
+  // The row holds the clipping and the chapter; the note goes in the gap below
+  // it. Reserving the note's space inside the row instead would force an equal
+  // amount of dead space above it, because the widget centres the
+  // label+subtitle block vertically — so the row hugs its two lines and the
+  // selection highlight stays centred on them.
   noteLineHeight = renderer.getLineHeight(SUBTITLE_FONT_ID);
   const int labelLineHeight = renderer.getLineHeight(uiScaleSpec().bodyFontId);
-  int rowHeight = labelLineHeight + noteLineHeight + noteLineHeight * 2;
+  constexpr int kRowPadding = 6;
+  int rowHeight = labelLineHeight + noteLineHeight + kRowPadding;
   if (mappedInput.hasTouchHardware()) {
-    rowHeight = std::max(rowHeight, uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle) + noteLineHeight * 2);
+    rowHeight = std::max(rowHeight, static_cast<int>(uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle)));
   }
   props.rowHeight = static_cast<int16_t>(rowHeight);
+  // Widen the row gap to hold the note line plus a little air before the next
+  // row. listVisibleRows() accounts for the gap, so paging stays correct.
+  props.rowGap = static_cast<int16_t>(noteLineHeight + kRowPadding);
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
@@ -742,9 +745,6 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     }
     noteTextLeft = areaX + sidePad;
     noteMaxWidth = std::max(0, areaW - sidePad * 2);
-    // Only an inverted-fill selection needs light text; the pill/underline
-    // styles keep the row's normal foreground.
-    noteInvertOnSelect = th.listSelectionStyle == fui::SelectionStyle::InvertFill;
   }
 
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(count));
@@ -913,13 +913,15 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
       const size_t slot = static_cast<size_t>(i - topIndex);
       if (slot >= uiNotes.size() || uiNotes[slot].empty()) continue;
       const int rowY = listTop + static_cast<int>(slot) * listRowStep;
-      const int noteY = rowY + listRowHeight - noteLineHeight - 2;
+      // Just under the row, in the gap. This also groups each entry visually:
+      // the chapter sits tight under its clipping, the note a little further
+      // down, rather than all three being evenly spaced.
+      const int noteY = rowY + listRowHeight + 2;
       if (noteY + noteLineHeight > listBottom) break;
       const std::string line = renderer.truncatedText(SUBTITLE_FONT_ID, uiNotes[slot].c_str(), maxWidth);
-      // Light text only where the theme fills the selected row; pill/underline
-      // selections keep the normal foreground, so black stays readable.
-      const bool drawBlack = !(i == selectedIndex && noteInvertOnSelect);
-      renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), drawBlack);
+      // The gap is never filled by the row style, so the note is always drawn
+      // in the normal foreground — no selection inversion needed.
+      renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), true);
     }
   }
 
