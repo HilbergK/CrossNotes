@@ -22,6 +22,7 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "fontIds.h"
 
 namespace fui = freeink::ui;
 
@@ -240,6 +241,15 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
+  // CrossInk Notes: uiScaleSpec() binds the FONT_SMALL slot to the same font as
+  // FONT_BODY, so a row's title and its subtitle came out identical. Rebind this
+  // activity's SMALL slot to a smaller face and keep the title on BODY, so the
+  // book title reads larger than its author. uiTarget belongs to this activity,
+  // so no other screen changes.
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
+  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+  props.subtitleText.font = fui::GfxRendererTarget::FONT_SMALL;
+  props.subtitleText.bold = false;
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;

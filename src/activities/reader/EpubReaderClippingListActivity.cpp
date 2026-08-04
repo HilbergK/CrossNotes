@@ -717,6 +717,21 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   // Widen the row gap to hold the note line plus a little air before the next
   // row. listVisibleRows() accounts for the gap, so paging stays correct.
   props.rowGap = static_cast<int16_t>(noteLineHeight + kRowPadding);
+  // Square the row styles so the selection is a plain block. render() continues
+  // that block down over the note line, so the highlight covers all three lines
+  // of an entry even though the widget itself only draws two. A rounded pill
+  // could not be extended cleanly, hence the explicit radius of 0.
+  fui::StyleSet rowStyles;
+  rowStyles.normal.background = fui::Paint::none();
+  rowStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+  rowStyles.selected.background = fui::Paint::dither(fui::Color::LightGray);
+  rowStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+  rowStyles.selected.radius = 0;
+  rowStyles.selected.corners = fui::CornersAll;
+  rowStyles.focused = rowStyles.selected;
+  rowStyles.active = rowStyles.selected;
+  rowStyles.explicitlySet = true;
+  props.rowStyles = rowStyles;
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
@@ -743,6 +758,8 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
         if (scrollLeft) areaX += cut;
       }
     }
+    noteRowLeft = areaX;
+    noteRowWidth = areaW;
     noteTextLeft = areaX + sidePad;
     noteMaxWidth = std::max(0, areaW - sidePad * 2);
   }
@@ -918,9 +935,16 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
       // down, rather than all three being evenly spaced.
       const int noteY = rowY + listRowHeight + 2;
       if (noteY + noteLineHeight > listBottom) break;
+      // Continue the selection block down over this line so an entry's
+      // highlight covers all three of its lines, not just the two the widget
+      // drew. The row style is squared off above so the two joins seamlessly.
+      if (i == selectedIndex) {
+        const int fillHeight = std::min(listRowStep - listRowHeight, listBottom - (rowY + listRowHeight));
+        if (fillHeight > 0) {
+          renderer.fillRectDither(noteRowLeft, rowY + listRowHeight, noteRowWidth, fillHeight, Color::LightGray);
+        }
+      }
       const std::string line = renderer.truncatedText(SUBTITLE_FONT_ID, uiNotes[slot].c_str(), maxWidth);
-      // The gap is never filled by the row style, so the note is always drawn
-      // in the normal foreground — no selection inversion needed.
       renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), true);
     }
   }
