@@ -47,9 +47,16 @@ class EpubReaderClippingListActivity final : public Activity {
   std::vector<freeink::ui::ListItem> uiItems;
   std::array<std::string, 20> uiRawText;
   std::array<std::string, 20> uiLabels;
-  // CrossInk Notes: per-row subtitle buffer ("[tag] note - Chapter"). Persistent
-  // because fui::ListItem::subtitle holds a borrowed const char*.
+  // CrossInk Notes: per-row subtitle buffer (the chapter). Persistent because
+  // fui::ListItem::subtitle holds a borrowed const char*.
   std::array<std::string, 20> uiSubtitles;
+  // CrossInk Notes: third row line ("[tag] note"). The FreeInkUI list only
+  // draws a label and a subtitle, so this line is drawn over the rendered rows
+  // in the space reserved by the taller rowHeight.
+  std::array<std::string, 20> uiNotes;
+  int listLeft = 0;
+  int listWidth = 0;
+  int noteLineHeight = 0;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);

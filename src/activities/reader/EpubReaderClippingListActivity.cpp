@@ -28,6 +28,13 @@ constexpr fui::ActionId ACTION_ROW = 1;
 // as a single constant because it is bound to the list's FONT_SMALL slot AND
 // used to measure/truncate the text, which must agree.
 constexpr int SUBTITLE_FONT_ID = SMALL_FONT_ID;
+// CrossInk Notes: these mirror FreeInkUI's list defaults (list.h). The third
+// row line is drawn by hand, so it has to use the same geometry the widget
+// uses or it would sit differently on devices whose theme/scale differs.
+// sidePadding default is 8 per side; an overflowing list also gives up
+// scrollIndicatorWidth(3) + scrollIndicatorInset(0) + 2px of air.
+constexpr int LIST_ROW_SIDE_PADDING = 8;
+constexpr int LIST_SCROLL_TRACK_RESERVE = 5;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
 constexpr int DETAIL_BOTTOM_RESERVE = 55;
@@ -685,6 +692,8 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
+  listLeft = bounds.x;
+  listWidth = bounds.width;
   // CrossInk Notes: the subtitle carries tag + chapter + note, so render it in
   // a genuinely smaller face to fit more in. FreeInkUI addresses fonts by slot
   // (FONT_SMALL/BODY/TITLE), and uiScaleSpec() binds SMALL to the same font as
@@ -694,6 +703,14 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.subtitleText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.subtitleText.bold = false;
+  // CrossInk Notes: the list draws only a label and a subtitle, but a row shows
+  // three lines here (clipping / chapter / tag+note). Grow the row so there is
+  // room for the third line, which render() draws itself. The widget centres
+  // the label+subtitle block, so the extra height is split above and below —
+  // reserve two line heights to leave a full line clear at the bottom.
+  noteLineHeight = renderer.getLineHeight(SUBTITLE_FONT_ID);
+  props.rowHeight =
+      static_cast<int16_t>(uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle) + noteLineHeight * 2);
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
@@ -720,54 +737,25 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     if (clipping) {
       const Note* note = NOTES.getNoteForClipping(clipping->spineIndex, clipping->startPage, clipping->startWordIndex,
                                                   clipping->timestamp);
-      // Row 2 reads: "[tag] Chapter - note". The tag is short and always fits;
-      // the chapter and the note share what is left. The note is guaranteed a
-      // slice of the line so a long chapter can never squeeze it out entirely,
-      // and the chapter is only shortened when it would exceed its own share.
-      std::string tagPart;
-      std::string notePart;
+      // Line 2 is the chapter (upstream's own subtitle); line 3 is this
+      // highlight's tag and note, drawn by render() in the reserved space.
+      subtitle = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+      item.subtitle = subtitle.c_str();
+
+      std::string& noteLine = uiNotes[slot];
+      noteLine.clear();
       if (note) {
         if (note->tag != 0) {
-          tagPart += '[';
-          tagPart += note->tag;
-          tagPart += "] ";
+          noteLine += '[';
+          noteLine += note->tag;
+          noteLine += "] ";
         }
         if (!note->text.empty()) {
-          buildOneLineSnippetText(note->text, notePart);
+          std::string noteFlat;
+          buildOneLineSnippetText(note->text, noteFlat);
+          noteLine += noteFlat;
         }
       }
-      const char* chapter = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
-      if (notePart.empty()) {
-        subtitle = tagPart + chapter;  // no note text: the chapter gets the rest of the line
-      } else {
-        // NOTE: props.subtitleText.font is a FreeInkUI *slot* (FONT_SMALL == 0),
-        // not a GfxRenderer font id. Passing the slot to getTextWidth measures
-        // against id 0 — the "not found" sentinel — which returns zero for every
-        // string, so nothing was ever truncated and the widget clipped the tail.
-        // Measure with the real font bound to that slot.
-        const int fontId = SUBTITLE_FONT_ID;
-        // The list insets each row by sidePadding (default 8) on BOTH sides, so
-        // the drawable width is bounds.width - 16; a few px of slack keeps the
-        // widget from clipping our tail.
-        constexpr int kRowSidePadding = 8;
-        constexpr int kSlack = 4;
-        const int available = std::max(0, static_cast<int>(bounds.width) - kRowSidePadding * 2 - kSlack);
-        const std::string separator = "  -  ";
-        const int afterTag = std::max(0, available - renderer.getTextWidth(fontId, tagPart.c_str()));
-        const int separatorWidth = renderer.getTextWidth(fontId, separator.c_str());
-        // The chapter takes what it needs, but never so much that the note is
-        // reduced to an ellipsis: hold back enough room for a few characters.
-        const int noteMinWidth = renderer.getTextWidth(fontId, "abcdefgh...");
-        const int chapterMax = std::max(0, afterTag - separatorWidth - noteMinWidth);
-        std::string chapterPart = chapter;
-        if (renderer.getTextWidth(fontId, chapterPart.c_str()) > chapterMax) {
-          chapterPart = renderer.truncatedText(fontId, chapter, chapterMax);
-        }
-        const int noteBudget =
-            std::max(0, afterTag - renderer.getTextWidth(fontId, (chapterPart + separator).c_str()));
-        subtitle = tagPart + chapterPart + separator + renderer.truncatedText(fontId, notePart.c_str(), noteBudget);
-      }
-      item.subtitle = subtitle.c_str();
     }
     item.actionValue = static_cast<int16_t>(i);
   }
@@ -877,6 +865,32 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   uiReady = false;
   app.render();
   uiReady = true;
+
+  // CrossInk Notes: draw the third line of each row ("[tag] note") into the
+  // space reserved at the bottom of the row by the taller rowHeight. The list
+  // widget only renders a label and a subtitle, so this is layered on top of
+  // the rows it just drew — inverted on the selected row, which the widget
+  // fills with the highlight colour.
+  if (listRowStep > 0 && noteLineHeight > 0) {
+    const int count = static_cast<int>(CLIPPINGS.clippingCount());
+    const int end = std::min(count, topIndex + visibleRows);
+    // Mirror the list's own row geometry so this line lands where the widget
+    // would have put it on any device: rows are inset by sidePadding on both
+    // sides, and give up width for the scroll track only while overflowing.
+    const bool overflows = count > visibleRows;
+    const int textLeft = listLeft + LIST_ROW_SIDE_PADDING;
+    const int maxWidth = std::max(
+        0, listWidth - LIST_ROW_SIDE_PADDING * 2 - (overflows ? LIST_SCROLL_TRACK_RESERVE : 0));
+    for (int i = topIndex; i < end; ++i) {
+      const size_t slot = static_cast<size_t>(i - topIndex);
+      if (slot >= uiNotes.size() || uiNotes[slot].empty()) continue;
+      const int rowY = listTop + static_cast<int>(slot) * listRowStep;
+      const int noteY = rowY + listRowHeight - noteLineHeight - 2;
+      if (noteY + noteLineHeight > listBottom) break;
+      const std::string line = renderer.truncatedText(SUBTITLE_FONT_ID, uiNotes[slot].c_str(), maxWidth);
+      renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), i != selectedIndex);
+    }
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), CLIPPINGS.clippingCount() == 0 ? "" : tr(STR_OPEN),
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
