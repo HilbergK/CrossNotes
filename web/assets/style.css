@@ -50,9 +50,6 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-.crossink-header {
-  font-family: serif;
-}
 h1 {
   display: flex;
   align-items: center;
