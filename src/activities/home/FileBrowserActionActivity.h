@@ -28,6 +28,7 @@ enum class FileBrowserAction : int {
   EditNote = 16,      // CrossInk Notes — edit a clipping's note on-device
   OpenClipping = 17,  // CrossInk Notes — jump to a clipping's location in the book
   EditTag = 18,       // CrossInk Notes — change a clipping's tag on-device
+  FilterTag = 19,     // CrossInk Notes — show only clippings with a chosen tag
 };
 
 class FileBrowserActionActivity final : public Activity {

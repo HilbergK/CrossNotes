@@ -11,6 +11,7 @@
 #include "ClippingStore.h"
 #include "NoteStore.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderClippingListActivity final : public Activity {
@@ -59,6 +60,23 @@ class EpubReaderClippingListActivity final : public Activity {
   int noteLineHeight = 0;
   // Where the note line is drawn, resolved from the theme's list geometry so it
   // lines up with the rows the widget draws on any device/theme.
+  // CrossInk Notes: tag filter. visibleClippings maps a row position to its
+  // index in ClippingStore, so the list can show a subset without anything else
+  // having to know: every store access goes through storeIndexFor(). An empty
+  // filter (0) means show everything.
+  std::vector<uint16_t> visibleClippings;
+  char tagFilter = 0;
+  OptionPopup optionPopup;
+
+  void rebuildVisibleClippings();
+  int visibleCount() const { return static_cast<int>(visibleClippings.size()); }
+  size_t storeIndexFor(int row) const {
+    return (row >= 0 && row < static_cast<int>(visibleClippings.size()))
+               ? static_cast<size_t>(visibleClippings[static_cast<size_t>(row)])
+               : 0;
+  }
+  void showTagFilterMenu();
+
   int noteTextLeft = 0;
   int noteMaxWidth = 0;
   int noteRowLeft = 0;

@@ -242,6 +242,24 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
 
 // ─── Migration / bulk delete ────────────────────────────────────────────────
 
+uint16_t NoteStore::countForFilePath(const std::string& filePath) {
+  const std::string path = notesFilePath(filePath.c_str());
+  if (!Storage.exists(path.c_str())) return 0;
+  FsFile file = Storage.open(path.c_str(), O_RDONLY);
+  if (!file) return 0;
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return 0;
+  uint16_t count = 0;
+  for (const JsonObject obj : doc["notes"].as<JsonArray>()) {
+    const char* text = obj["text"] | "";
+    const char* tag = obj["tag"] | "";
+    if ((text != nullptr && text[0] != ' ') || (tag != nullptr && tag[0] != ' ')) count++;
+  }
+  return count;
+}
+
 void NoteStore::deleteForFilePath(const std::string& filePath) {
   const std::string path = notesFilePath(filePath.c_str());
   if (Storage.exists(path.c_str())) {

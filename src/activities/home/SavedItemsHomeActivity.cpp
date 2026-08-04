@@ -95,6 +95,27 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
     b.bookTitle = name.empty() ? p : name;
   }
 
+  // CrossInk Notes: show what each book actually holds. Highlight and bookmark
+  // counts come free with the entries; the note count needs that book's notes
+  // file, read once here rather than per frame.
+  for (auto& b : books) {
+    b.noteCount = NoteStore::countForFilePath(b.bookPath);
+    b.subtitle = b.bookAuthor;
+    const auto append = [&b](const std::string& part) {
+      if (!b.subtitle.empty()) b.subtitle += "  -  ";
+      b.subtitle += part;
+    };
+    if (b.clippingCount > 0) {
+      append(std::to_string(b.clippingCount) + (b.clippingCount == 1 ? " highlight" : " highlights"));
+    }
+    if (b.noteCount > 0) {
+      append(std::to_string(b.noteCount) + (b.noteCount == 1 ? " note" : " notes"));
+    }
+    if (b.bookmarkCount > 0) {
+      append(std::to_string(b.bookmarkCount) + (b.bookmarkCount == 1 ? " bookmark" : " bookmarks"));
+    }
+  }
+
   if (books.empty()) {
     selectedIndex = 0;
   } else if (selectedIndex >= static_cast<int>(books.size())) {
@@ -228,7 +249,7 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   for (size_t i = 0; i < books.size(); ++i) {
     fui::ListItem item;
     item.label = books[i].bookTitle.c_str();
-    if (!books[i].bookAuthor.empty()) item.subtitle = books[i].bookAuthor.c_str();
+    if (!books[i].subtitle.empty()) item.subtitle = books[i].subtitle.c_str();
     item.actionValue = static_cast<int16_t>(i);
     items.push_back(item);
   }

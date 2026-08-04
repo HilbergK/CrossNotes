@@ -183,6 +183,26 @@ EpubReaderClippingListActivity::EpubReaderClippingListActivity(GfxRenderer& rend
       uiTarget(makeUiTarget(renderer)),
       app(uiTarget, uiTarget.deviceContext()) {}
 
+void EpubReaderClippingListActivity::rebuildVisibleClippings() {
+  visibleClippings.clear();
+  const size_t total = CLIPPINGS.clippingCount();
+  visibleClippings.reserve(total);
+  for (size_t i = 0; i < total; ++i) {
+    if (tagFilter != 0) {
+      const Clipping* c = CLIPPINGS.clippingAt(i);
+      if (!c) continue;
+      const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
+      if (note == nullptr || note->tag != tagFilter) continue;
+    }
+    visibleClippings.push_back(static_cast<uint16_t>(i));
+  }
+  const int count = visibleCount();
+  if (selectedIndex >= count) selectedIndex = count > 0 ? count - 1 : 0;
+  if (selectedIndex < 0) selectedIndex = 0;
+  if (topIndex > selectedIndex) topIndex = selectedIndex;
+  uiItems.resize(visibleClippings.size());
+}
+
 void EpubReaderClippingListActivity::onEnter() {
   Activity::onEnter();
   selectedIndex = 0;
@@ -199,7 +219,7 @@ void EpubReaderClippingListActivity::onEnter() {
   if (!CLIPPINGS.getBookFilePath().empty()) {
     NOTES.loadForBook(CLIPPINGS.getBookFilePath().c_str(), "epub");
   }
-  uiItems.resize(CLIPPINGS.clippingCount());
+  rebuildVisibleClippings();
   requestUpdate();
 }
 
@@ -246,9 +266,9 @@ void EpubReaderClippingListActivity::closeDetail() {
 }
 
 void EpubReaderClippingListActivity::jumpToSelectedClipping() {
-  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
+  if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
-  const Clipping* clipping = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex));
+  const Clipping* clipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
   if (!clipping) return;
   setResult(ClippingJumpResult{clipping->spineIndex, clipping->startPage, clipping->pageCount, clipping->paragraphIndex,
                                static_cast<uint16_t>(selectedIndex)});
@@ -256,11 +276,11 @@ void EpubReaderClippingListActivity::jumpToSelectedClipping() {
 }
 
 void EpubReaderClippingListActivity::openSelectedDetail() {
-  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
+  if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
   std::string text;
   text.reserve(CLIPPING_TEXT_MAX);
-  if (!CLIPPINGS.readClippingText(static_cast<size_t>(selectedIndex), text)) {
+  if (!CLIPPINGS.readClippingText(storeIndexFor(selectedIndex), text)) {
     text.clear();
   }
   buildOneLineSnippetText(text, detailText);
@@ -283,7 +303,7 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
   // Append the note (if any) directly below the quote, as part of the same
   // scrollable/paginated flow, so long notes remain fully readable.
   const Clipping* detailClipping =
-      selectedIndex >= 0 ? CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex)) : nullptr;
+      selectedIndex >= 0 ? CLIPPINGS.clippingAt(storeIndexFor(selectedIndex)) : nullptr;
   if (detailClipping) {
     const Clipping& clipping = *detailClipping;
     const Note* note =
@@ -314,12 +334,12 @@ void EpubReaderClippingListActivity::rebuildDetailLayoutIfNeeded() {
 }
 
 void EpubReaderClippingListActivity::deleteSelectedClipping() {
-  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
+  if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
   // Remove the clipping's note/tag along with it — otherwise the note record
   // would sit orphaned in the notes file forever.
   if (!CLIPPINGS.getBookFilePath().empty()) {
-    const Clipping* doomedPtr = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex));
+    const Clipping* doomedPtr = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
     if (doomedPtr) {
       const Clipping& doomed = *doomedPtr;
       NOTES.deleteNote(CLIPPINGS.getBookFilePath().c_str(), doomed.spineIndex, doomed.startPage,
@@ -327,27 +347,72 @@ void EpubReaderClippingListActivity::deleteSelectedClipping() {
     }
   }
 
-  if (!CLIPPINGS.removeClippingAt(static_cast<size_t>(selectedIndex))) return;
+  if (!CLIPPINGS.removeClippingAt(storeIndexFor(selectedIndex))) return;
 
   detailMode = false;
   detailText.clear();
   detailLines.clear();
   detailLayoutWidth = 0;
   detailLinesPerPage = 0;
-  if (CLIPPINGS.clippingCount() == 0) {
+  // Rebuild first: the store just shrank, so every index in visibleClippings
+  // past the removed one is stale. Clamping the selection before rebuilding
+  // would measure it against the old list.
+  rebuildVisibleClippings();
+  if (visibleCount() == 0) {
     selectedIndex = 0;
-  } else if (selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) {
-    selectedIndex = static_cast<int>(CLIPPINGS.clippingCount()) - 1;
+  } else if (selectedIndex >= visibleCount()) {
+    selectedIndex = visibleCount() - 1;
   }
-  topIndex = followListSelection(selectedIndex, topIndex, visibleRows, static_cast<int>(CLIPPINGS.clippingCount()));
-  uiItems.resize(CLIPPINGS.clippingCount());
+  topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleCount());
+  requestUpdate();
+}
+
+void EpubReaderClippingListActivity::showTagFilterMenu() {
+  // Offer only the tags this book actually uses, plus "All" to clear the
+  // filter — an alphabet of unused symbols would be noise.
+  std::vector<char> tags;
+  for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
+    const Clipping* c = CLIPPINGS.clippingAt(i);
+    if (!c) continue;
+    const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
+    if (note == nullptr || note->tag == 0) continue;
+    if (std::find(tags.begin(), tags.end(), note->tag) == tags.end()) tags.push_back(note->tag);
+  }
+  std::sort(tags.begin(), tags.end());
+
+  if (tags.empty()) {
+    BookActions::drawToast(renderer, tr(STR_NO_CLIPPINGS));
+    delay(1000);
+    requestUpdate();
+    return;
+  }
+
+  std::vector<std::string> labels;
+  labels.reserve(tags.size() + 1);
+  labels.emplace_back(tr(STR_ALL_TAGS));
+  for (const char t : tags) labels.emplace_back(1, t);
+
+  int selected = 0;
+  if (tagFilter != 0) {
+    const auto it = std::find(tags.begin(), tags.end(), tagFilter);
+    if (it != tags.end()) selected = static_cast<int>(std::distance(tags.begin(), it)) + 1;
+  }
+
+  optionPopup.show(StrId::STR_FILTER_BY_TAG, labels, selected,
+                   [this, tags](const int idx) {
+                     tagFilter = (idx <= 0) ? 0 : tags[static_cast<size_t>(idx - 1)];
+                     selectedIndex = 0;
+                     topIndex = 0;
+                     rebuildVisibleClippings();
+                     requestUpdate();
+                   });
   requestUpdate();
 }
 
 void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreInitialConfirmRelease) {
-  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(CLIPPINGS.clippingCount())) return;
+  if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
-  const Clipping* selectedClipping = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex));
+  const Clipping* selectedClipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
   if (!selectedClipping) return;
   const char* title = selectedClipping->chapterTitle[0] != '\0' ? selectedClipping->chapterTitle : tr(STR_CLIPPINGS);
   const uint16_t selectedSpineIndex = selectedClipping->spineIndex;
@@ -361,6 +426,7 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
     items.push_back({FileBrowserAction::EditTag, StrId::STR_EDIT_TAG});
     items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
   }
+  items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
 
   startActivityForResult(
@@ -384,7 +450,7 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           return;
         }
         if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditTag) {
-          if (const Clipping* c = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex))) {
+          if (const Clipping* c = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex))) {
             editTagForClipping(*c);
           } else {
             requestUpdate();
@@ -392,11 +458,15 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           return;
         }
         if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::EditNote) {
-          if (const Clipping* c = CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex))) {
+          if (const Clipping* c = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex))) {
             editNoteForClipping(*c);
           } else {
             requestUpdate();
           }
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::FilterTag) {
+          showTagFilterMenu();
           return;
         }
         if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
@@ -481,6 +551,9 @@ void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clippin
 }
 
 void EpubReaderClippingListActivity::loop() {
+  // CrossInk Notes: the tag-filter popup owns input while it is showing.
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const Rect header = clippingHeaderRect(safe, metrics, mappedInput);
@@ -521,7 +594,7 @@ void EpubReaderClippingListActivity::loop() {
       return;
     }
     if (CLIPPINGS.clippingCount() > 0 && selectedIndex >= 0 &&
-        selectedIndex < static_cast<int>(CLIPPINGS.clippingCount())) {
+        selectedIndex < visibleCount()) {
       if (detailMode) {
         // Open the action menu (Open / Edit Note / Delete) — more discoverable
         // than hiding note editing behind a long press only.
@@ -533,7 +606,7 @@ void EpubReaderClippingListActivity::loop() {
     return;
   }
 
-  const int total = static_cast<int>(CLIPPINGS.clippingCount());
+  const int total = visibleCount();
   if (total == 0) return;
 
   if (detailMode) {
@@ -671,7 +744,7 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
       static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
       static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
-  const size_t count = CLIPPINGS.clippingCount();
+  const size_t count = static_cast<size_t>(visibleCount());
   if (count == 0) {
     screen.centeredText(tr(STR_NO_CLIPPINGS), screen.theme().bodyText);
     return;
@@ -770,9 +843,9 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   for (int i = topIndex; i < end; ++i) {
     const size_t slot = static_cast<size_t>(i - topIndex);
     uiRawText[slot].clear();
-    CLIPPINGS.readClippingText(static_cast<size_t>(i), uiRawText[slot]);
+    CLIPPINGS.readClippingText(storeIndexFor(i), uiRawText[slot]);
     buildOneLineSnippetText(uiRawText[slot], uiLabels[slot]);
-    const Clipping* clipping = CLIPPINGS.clippingAt(static_cast<size_t>(i));
+    const Clipping* clipping = CLIPPINGS.clippingAt(storeIndexFor(i));
     fui::ListItem& item = uiItems[static_cast<size_t>(i)];
     item = fui::ListItem{};
     item.label = uiLabels[slot].c_str();
@@ -825,7 +898,7 @@ void EpubReaderClippingListActivity::renderDetail() {
 
   const char* chapter = tr(STR_CLIPPINGS);
   const Clipping* selectedClipping =
-      selectedIndex >= 0 ? CLIPPINGS.clippingAt(static_cast<size_t>(selectedIndex)) : nullptr;
+      selectedIndex >= 0 ? CLIPPINGS.clippingAt(storeIndexFor(selectedIndex)) : nullptr;
   if (selectedClipping && selectedClipping->chapterTitle[0] != '\0') {
     chapter = selectedClipping->chapterTitle;
   }
@@ -895,6 +968,9 @@ void EpubReaderClippingListActivity::renderDetail() {
 }
 
 void EpubReaderClippingListActivity::render(RenderLock&&) {
+  // CrossInk Notes: the tag-filter popup draws over the list.
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   if (detailMode) {
@@ -919,7 +995,7 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   // the list, plus this note line drawn underneath in the row gap. Everything
   // is drawn unselected first; the selection is applied afterwards by inverting
   // the whole entry in one pass (see below).
-  const int clippingCount = static_cast<int>(CLIPPINGS.clippingCount());
+  const int clippingCount = visibleCount();
   const int lastVisible = std::min(clippingCount, topIndex + visibleRows);
   if (listRowStep > 0 && noteLineHeight > 0) {
     for (int i = topIndex; i < lastVisible; ++i) {
@@ -952,7 +1028,7 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), CLIPPINGS.clippingCount() == 0 ? "" : tr(STR_OPEN),
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), visibleCount() == 0 ? "" : tr(STR_OPEN),
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
   renderer.displayBuffer();

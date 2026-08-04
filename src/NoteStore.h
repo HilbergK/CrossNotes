@@ -66,6 +66,11 @@ class NoteStore {
   // Delete all notes/tags for a book — e.g. when the book file is deleted or
   // its clippings are cleared. Static, operates on disk; mirrors
   // ClippingStore::deleteForFilePath.
+  // Number of notes carrying a tag or text for a book, without disturbing the
+  // singleton's currently loaded book. Reads and parses that book's notes file,
+  // so call it per screen build, not per frame.
+  static uint16_t countForFilePath(const std::string& filePath);
+
   static void deleteForFilePath(const std::string& filePath);
 
   // Migrate a book's notes to a new path when the book moves (e.g. Move to
