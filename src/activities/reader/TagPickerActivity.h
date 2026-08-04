@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -38,6 +40,14 @@ class TagPickerActivity final : public Activity {
  private:
   int selectedIndex = 0;
   ButtonNavigator buttonNavigator;
+  // Note typed during this visit. Once set, the picker stays open on a second
+  // pass so the highlight can also be tagged, and the last row switches from
+  // "Write a note..." to "Edit note..." to go back to the keyboard.
+  std::string pendingNote;
+
+  bool hasNote() const { return !pendingNote.empty(); }
+  const char* noteRowLabel() const { return hasNote() ? "Edit note..." : "Write a note..."; }
+  const char* headerTitle() const { return hasNote() ? "Add tag?" : "Tag Highlight"; }
 
   void openNoteKeyboard();
 };

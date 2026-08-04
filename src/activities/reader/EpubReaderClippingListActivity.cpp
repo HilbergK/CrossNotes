@@ -427,14 +427,15 @@ void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping
                          [this, clipping](const ActivityResult& result) {
                            if (!result.isCancelled) {
                              const auto& tagResult = std::get<TagResult>(result.data);
+                             // The picker can now return a note *and* a tag in
+                             // one pass, so apply both rather than either/or.
                              if (!tagResult.noteText.empty()) {
                                NOTES.saveNote(CLIPPINGS.getBookFilePath().c_str(), clipping.spineIndex, clipping.startPage,
                                               clipping.startWordIndex, clipping.timestamp, tagResult.noteText.c_str());
-                             } else {
-                               // tag == 0 clears the tag while preserving any existing note text.
-                               NOTES.saveTag(CLIPPINGS.getBookFilePath().c_str(), clipping.spineIndex, clipping.startPage,
-                                             clipping.startWordIndex, clipping.timestamp, tagResult.tag);
                              }
+                             // tag == 0 clears the tag while preserving any existing note text.
+                             NOTES.saveTag(CLIPPINGS.getBookFilePath().c_str(), clipping.spineIndex, clipping.startPage,
+                                           clipping.startWordIndex, clipping.timestamp, tagResult.tag);
                              detailLayoutWidth = 0;  // tag changed — force detail re-layout
                            }
                            requestUpdate();
