@@ -57,6 +57,11 @@ class EpubReaderClippingListActivity final : public Activity {
   int listLeft = 0;
   int listWidth = 0;
   int noteLineHeight = 0;
+  // Where the note line is drawn, resolved from the theme's list geometry so it
+  // lines up with the rows the widget draws on any device/theme.
+  int noteTextLeft = 0;
+  int noteMaxWidth = 0;
+  bool noteInvertOnSelect = false;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);

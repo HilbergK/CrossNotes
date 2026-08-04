@@ -28,13 +28,6 @@ constexpr fui::ActionId ACTION_ROW = 1;
 // as a single constant because it is bound to the list's FONT_SMALL slot AND
 // used to measure/truncate the text, which must agree.
 constexpr int SUBTITLE_FONT_ID = SMALL_FONT_ID;
-// CrossInk Notes: these mirror FreeInkUI's list defaults (list.h). The third
-// row line is drawn by hand, so it has to use the same geometry the widget
-// uses or it would sit differently on devices whose theme/scale differs.
-// sidePadding default is 8 per side; an overflowing list also gives up
-// scrollIndicatorWidth(3) + scrollIndicatorInset(0) + 2px of air.
-constexpr int LIST_ROW_SIDE_PADDING = 8;
-constexpr int LIST_SCROLL_TRACK_RESERVE = 5;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
 constexpr int DETAIL_BOTTOM_RESERVE = 55;
@@ -708,13 +701,52 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   // room for the third line, which render() draws itself. The widget centres
   // the label+subtitle block, so the extra height is split above and below —
   // reserve two line heights to leave a full line clear at the bottom.
+  // Size the row from the three lines it actually holds rather than from
+  // uiListRowHeight(), which already carries padding for a two-line row and
+  // would leave the list looking sparse. The widget centres the label+subtitle
+  // block, so the extra height is split above and below: reserving two note
+  // lines leaves exactly one clear at the bottom. Touch builds keep the theme's
+  // taller row so tap targets stay usable.
   noteLineHeight = renderer.getLineHeight(SUBTITLE_FONT_ID);
-  props.rowHeight =
-      static_cast<int16_t>(uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle) + noteLineHeight * 2);
+  const int labelLineHeight = renderer.getLineHeight(uiScaleSpec().bodyFontId);
+  int rowHeight = labelLineHeight + noteLineHeight + noteLineHeight * 2;
+  if (mappedInput.hasTouchHardware()) {
+    rowHeight = std::max(rowHeight, uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle) + noteLineHeight * 2);
+  }
+  props.rowHeight = static_cast<int16_t>(rowHeight);
   const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
   visibleRows = rows > 0 ? rows : 1;
+  // CrossInk Notes: resolve where a row's text actually starts. FreeInkApp::list
+  // overwrites the ListProps defaults with theme values before drawing (side
+  // padding, row inset, scroll track), so those theme values — not the struct
+  // defaults — decide the row geometry. Mirror the same math here so the third
+  // line lines up on every device and theme.
+  {
+    const auto& th = screen.theme();
+    const int rowInset = th.listInset < 0 ? 0 : th.listInset;
+    const int sidePad = th.listSidePadding < 0 ? 8 : th.listSidePadding;
+    const int scrollW = th.listScrollWidth < 0 ? 3 : th.listScrollWidth;
+    const int scrollIns = th.listScrollInset < 0 ? 0 : th.listScrollInset;
+    const bool scrollLeft = th.listScrollSide == 1;
+    int areaX = static_cast<int>(bounds.x) + rowInset;
+    int areaW = static_cast<int>(bounds.width) - rowInset * 2;
+    if (static_cast<int>(count) > visibleRows && scrollW > 0) {
+      const int needed = scrollW + scrollIns + 2;
+      if (rowInset < needed) {
+        const int cut = needed - rowInset;
+        areaW -= cut;
+        if (scrollLeft) areaX += cut;
+      }
+    }
+    noteTextLeft = areaX + sidePad;
+    noteMaxWidth = std::max(0, areaW - sidePad * 2);
+    // Only an inverted-fill selection needs light text; the pill/underline
+    // styles keep the row's normal foreground.
+    noteInvertOnSelect = th.listSelectionStyle == fui::SelectionStyle::InvertFill;
+  }
+
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(count));
   props.topIndex = static_cast<uint16_t>(topIndex);
   const int end = std::min(static_cast<int>(count), topIndex + visibleRows);
@@ -874,13 +906,9 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   if (listRowStep > 0 && noteLineHeight > 0) {
     const int count = static_cast<int>(CLIPPINGS.clippingCount());
     const int end = std::min(count, topIndex + visibleRows);
-    // Mirror the list's own row geometry so this line lands where the widget
-    // would have put it on any device: rows are inset by sidePadding on both
-    // sides, and give up width for the scroll track only while overflowing.
-    const bool overflows = count > visibleRows;
-    const int textLeft = listLeft + LIST_ROW_SIDE_PADDING;
-    const int maxWidth = std::max(
-        0, listWidth - LIST_ROW_SIDE_PADDING * 2 - (overflows ? LIST_SCROLL_TRACK_RESERVE : 0));
+    // Geometry was resolved from the theme in buildListScreen().
+    const int textLeft = noteTextLeft;
+    const int maxWidth = noteMaxWidth;
     for (int i = topIndex; i < end; ++i) {
       const size_t slot = static_cast<size_t>(i - topIndex);
       if (slot >= uiNotes.size() || uiNotes[slot].empty()) continue;
@@ -888,7 +916,10 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
       const int noteY = rowY + listRowHeight - noteLineHeight - 2;
       if (noteY + noteLineHeight > listBottom) break;
       const std::string line = renderer.truncatedText(SUBTITLE_FONT_ID, uiNotes[slot].c_str(), maxWidth);
-      renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), i != selectedIndex);
+      // Light text only where the theme fills the selected row; pill/underline
+      // selections keep the normal foreground, so black stays readable.
+      const bool drawBlack = !(i == selectedIndex && noteInvertOnSelect);
+      renderer.drawText(SUBTITLE_FONT_ID, textLeft, noteY, line.c_str(), drawBlack);
     }
   }
 
