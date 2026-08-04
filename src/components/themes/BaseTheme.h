@@ -136,7 +136,9 @@ enum UIIcon {
   Library,
   Wifi,
   Hotspot,
-  Chart
+  Chart,
+  Notes,   // CrossInk Notes — notebook+pen, for Notes and Bookmarks
+  QrCode   // CrossInk Notes — for Notes Connect
 };
 
 // Default theme implementation (Classic Theme)

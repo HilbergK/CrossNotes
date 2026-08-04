@@ -261,7 +261,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   // Notes/Bookmarks surfaced early — it's now a primary entry point, not a
   // secondary saved-items list.
   if (hasBookmarks || hasClippings) {
-    items.push({savedItemsLabel(hasBookmarks, hasClippings), BookmarkIcon, HomeMenuAction::Bookmarks});
+    items.push({savedItemsLabel(hasBookmarks, hasClippings), Notes, HomeMenuAction::Bookmarks});
   }
 
   if (hasOpdsServers) {
@@ -272,7 +272,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
-  items.push({"Notes Connect", Transfer, HomeMenuAction::QuickNotes});
+  items.push({"Notes Connect", QrCode, HomeMenuAction::QuickNotes});
   items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});
 }
 
