@@ -62,6 +62,10 @@ class EpubReaderClippingListActivity final : public Activity {
   // filter (0) means show everything.
   std::vector<uint16_t> visibleClippings;
   char tagFilter = 0;
+  // Tags this book actually uses, rebuilt with the visible set. Both the filter
+  // row's visibility and the picker's contents derive from this, so they cannot
+  // disagree about whether a tag exists.
+  std::vector<char> tagsInUse;
   OptionPopup optionPopup;
   crossnotes::NotesListLayout notesLayout;
 

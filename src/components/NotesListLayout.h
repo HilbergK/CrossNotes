@@ -97,7 +97,7 @@ class NotesListLayout {
     const bool scrollLeft = theme.listScrollSide == 1;
     int areaX = static_cast<int>(bounds.x) + rowInset;
     int areaWidth = static_cast<int>(bounds.width) - rowInset * 2;
-    if (itemCount > static_cast<int>(visibleRows_) && scrollWidth > 0) {
+    if (props.scrollIndicator && itemCount > static_cast<int>(visibleRows_) && scrollWidth > 0) {
       const int needed = scrollWidth + scrollInset + 2;
       if (rowInset < needed) {
         const int cut = needed - rowInset;

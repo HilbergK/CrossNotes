@@ -194,15 +194,16 @@ void EpubReaderClippingListActivity::rebuildVisibleClippings() {
   }
   // Offer the filter row only when there is something to choose between: more
   // than one tag in use (or a filter already applied, so it can be cleared).
-  std::vector<char> tags;
+  tagsInUse.clear();
   for (size_t i = 0; i < total; ++i) {
     const Clipping* c = CLIPPINGS.clippingAt(i);
     if (!c) continue;
     const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
     if (note == nullptr || note->tag == 0) continue;
-    if (std::find(tags.begin(), tags.end(), note->tag) == tags.end()) tags.push_back(note->tag);
+    if (std::find(tagsInUse.begin(), tagsInUse.end(), note->tag) == tagsInUse.end()) tagsInUse.push_back(note->tag);
   }
-  showFilterRow = tags.size() > 1 || tagFilter != 0;
+  std::sort(tagsInUse.begin(), tagsInUse.end());
+  showFilterRow = tagsInUse.size() > 1 || tagFilter != 0;
   filterRowLabel = std::string(tr(STR_FILTER_BY_TAG)) + ":  " +
                    (tagFilter != 0 ? std::string(1, tagFilter) : std::string(tr(STR_ALL_TAGS)));
 
@@ -399,15 +400,8 @@ void EpubReaderClippingListActivity::deleteSelectedClipping() {
 void EpubReaderClippingListActivity::showTagFilterMenu() {
   // Offer only the tags this book actually uses, plus "All" to clear the
   // filter — an alphabet of unused symbols would be noise.
-  std::vector<char> tags;
-  for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
-    const Clipping* c = CLIPPINGS.clippingAt(i);
-    if (!c) continue;
-    const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
-    if (note == nullptr || note->tag == 0) continue;
-    if (std::find(tags.begin(), tags.end(), note->tag) == tags.end()) tags.push_back(note->tag);
-  }
-  std::sort(tags.begin(), tags.end());
+  // Built with the visible set, so the picker and the filter row always agree.
+  const std::vector<char> tags = tagsInUse;
 
   if (tags.empty()) {
     BookActions::drawToast(renderer, tr(STR_NO_CLIPPINGS));

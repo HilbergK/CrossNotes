@@ -2179,6 +2179,12 @@ void CrossPointWebServer::handleGetHighlights() const {
   JsonDocument doc;
 
   for (size_t i = 0; i < clippings.size(); ++i) {
+    // Since CrossInk v1.5.0 the clipping text lives outside the record, so each
+    // iteration below does an SD read. A book with a few hundred highlights can
+    // therefore hold this task long enough to trip the watchdog — feed it, as
+    // the file-listing and SD-write handlers here already do.
+    esp_task_wdt_reset();
+
     const auto& clipping = clippings[i];
     const Note* note =
         NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);

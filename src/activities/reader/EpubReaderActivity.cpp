@@ -2091,6 +2091,11 @@ void EpubReaderActivity::onExit() {
 
   BOOKMARKS.unload();
   CLIPPINGS.unload();
+  // CrossInk Notes: notes are auto-loaded when tagging from inside the reader,
+  // so release them alongside the stores they belong with. Every entry point
+  // re-checks the book path before trusting cached notes, but leaving another
+  // book's data resident relies on that check rather than failing closed.
+  NOTES.unload();
   section.reset();
 
   if (pendingReadFolderMove && epub) {
@@ -3746,6 +3751,7 @@ void EpubReaderActivity::startClipSelection() {
     const char* clippingFeedback = nullptr;
     bool saved = false;
     // CrossInk Notes: identity of the clipping just added, passed to the tag picker.
+    bool haveTagTarget = false;
     uint16_t tagSpine = 0;
     uint16_t tagPage = 0;
     uint16_t tagWord = 0;
@@ -3778,6 +3784,12 @@ void EpubReaderActivity::startClipSelection() {
             tagPage = added->startPage;
             tagWord = added->startWordIndex;
             tagClipTimestamp = added->timestamp;
+            haveTagTarget = true;
+          } else {
+            // Without the stored clipping there is no key to attach a note to;
+            // offering the picker would write one at (0,0,0,0) and silently
+            // misattribute it. Fall through to the plain toast instead.
+            LOG_ERR("CLIP", "Saved clipping %u not readable back; skipping tag picker", clippingIndex);
           }
         }
       }
@@ -3790,7 +3802,7 @@ void EpubReaderActivity::startClipSelection() {
     // CrossInk Notes: after a successful highlight, offer the tag/note picker.
     // The clipping toast is shown once the picker closes so it isn't hidden
     // behind it.
-    if (saved) {
+    if (haveTagTarget) {
 #if CROSSINK_APP_CAP_TOUCH
       if (mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
         LOG_ERR("CLIP", "Could not render saved highlight before tag picker");
@@ -3821,11 +3833,8 @@ void EpubReaderActivity::startClipSelection() {
     }
 
     if (clippingFeedback) {
-#if CROSSINK_APP_CAP_TOUCH
-      if (saved && mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
-        LOG_ERR("CLIP", "Could not render saved highlight before clipping toast");
-      }
-#endif
+      // Only the failure/limit toasts reach here — the success path returns
+      // above, after the tag picker.
       {
         RenderLock lock(*this);
         drawToast(renderer, clippingFeedback);
