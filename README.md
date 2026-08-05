@@ -1,8 +1,10 @@
 # CrossNotes
 
-A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0.1) which is a fork of CrossPoint. CrossNotes adds a browser-connected note-taking system for the Xteink X4 / X3.
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0.1) which is a fork of CrossPoint. CrossNotes adds annotation features for the Xteink X4 / X3. Aside from that, identical to CrossInk. CrossNotes aims to keep changes from CrossInk minimal, and as close to the original upstream code as possible. All your CrossInk clippings and settings should transfer to CrossNotes without issue.
 
-Highlight a passage, tag it, then open a page in any browser — phone, tablet, laptop — over the device's own Wi-Fi hotspot to read your highlights and type notes. The notes are stored on the device and shown right alongside the highlight.
+Download here: [Releases page](https://github.com/HilbergK/CrossNotes/releases)
+
+Highlight a passage, write a note on device and/or tag it. Then open a page in any browser — phone, tablet, laptop — over the device's own Wi-Fi hotspot to view your highlights and edit notes/tags. The notes are stored on the device and shown alongside the highlight within the "Notes and Bookmarks" page.
 
 ## What it adds
 
@@ -72,4 +74,4 @@ pio run -e tiny    # or xlarge
 
 ## Credits
 
-Built on [CrossInk](https://github.com/uxjulia/CrossInk) (fonts, reader polish) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude. MIT License.
+Built on [CrossInk](https://github.com/uxjulia/CrossInk) which is built on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). Everything from CrossInk is unchanged. Notes feature developed with Claude. MIT License.
