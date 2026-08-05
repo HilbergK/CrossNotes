@@ -20,7 +20,7 @@ struct SavedBookEntry {
   uint16_t bookmarkCount = 0;
   uint16_t clippingCount = 0;
   // CrossInk Notes: notes carrying a tag or text, and the composed row subtitle
-  // ("Author - 12 highlights - 5 notes"). The subtitle lives here because
+  // ("12 highlights - 5 notes"). The subtitle lives here because
   // fui::ListItem::subtitle borrows a const char*.
   uint16_t noteCount = 0;
   std::string subtitle;

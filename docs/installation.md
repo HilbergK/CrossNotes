@@ -30,7 +30,7 @@ If your device has USB data transfer disabled, use the **SD Card Firmware Update
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
-pio run -e tiny --target upload
+pio run -e default --target upload
 ```
 
 See the [README](../README.md#building--installing) for details.

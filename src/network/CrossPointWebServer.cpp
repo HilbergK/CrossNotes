@@ -2214,11 +2214,17 @@ void CrossPointWebServer::handleGetHighlights() const {
     String output;
     serializeJson(doc, output);
 
+    // Reset before each write, not only once per clipping: sendContent can
+    // block on a marginal Wi-Fi link for close to the watchdog timeout, and the
+    // next reset would not arrive until the following iteration. handleDownload
+    // already resets around each of its own writes for the same reason.
     if (seenFirst) {
+      esp_task_wdt_reset();
       server->sendContent(",");
     } else {
       seenFirst = true;
     }
+    esp_task_wdt_reset();
     server->sendContent(output);
   }
 
@@ -2238,6 +2244,18 @@ void CrossPointWebServer::handlePostNote() {
   }
 
   const String body = server->arg("plain");
+  // Reject an oversized body before parsing. Past this point the payload exists
+  // two or three times over — the raw String, the JsonDocument's pool, and the
+  // std::string copy below — and NoteStore only truncates to kNoteTextMax after
+  // all of that, so a large paste into the note box (a whole chapter, say) could
+  // exhaust the heap and reboot the device. Generous against kNoteTextMax so a
+  // legitimate long note is never refused.
+  constexpr size_t MAX_NOTE_BODY_BYTES = NoteStore::kNoteTextMax + 1024;
+  if (body.length() > MAX_NOTE_BODY_BYTES) {
+    server->send(413, "text/plain", "Note too long");
+    return;
+  }
+
   JsonDocument doc;
   const DeserializationError err = deserializeJson(doc, body);
   if (err) {
@@ -2272,12 +2290,10 @@ void CrossPointWebServer::handlePostNote() {
     NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
   } else {
     // Always write text (even "") so an intentionally-cleared note body is
-    // actually blanked rather than left stale; saveNote preserves the tag.
-    NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str());
-    if (hasTag) {
-      NOTES.saveTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp,
-                    tagStr.empty() ? 0 : tagStr[0]);
-    }
+    // actually blanked rather than left stale. applyTag is false when the
+    // client sent no "tag" key, which leaves any existing tag alone.
+    NOTES.saveNoteAndTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str(),
+                         tagStr.empty() ? 0 : tagStr[0], hasTag);
   }
 
   NOTES.unload();

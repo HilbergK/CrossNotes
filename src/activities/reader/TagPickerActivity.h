@@ -12,6 +12,11 @@ class TagPickerActivity final : public Activity {
   TagPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, char initialTag = 0);
   void onEnter() override;
   void loop() override;
+  // A note typed and confirmed at the keyboard sits in pendingNote until Back
+  // or Confirm hands it to the caller. Sleeping tears the activity stack down
+  // with direct onExit() calls and never delivers that result, so the text
+  // would go with no warning — hold the idle timer off while one is pending.
+  bool preventAutoSleep() override;
   void render(RenderLock&&) override;
 
   static constexpr int OPTION_COUNT = 11;

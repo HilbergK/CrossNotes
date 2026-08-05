@@ -29,11 +29,24 @@ std::string NoteStore::notesFilePath(const char* bookFilePath) {
 
 // ─── Load / Unload ────────────────────────────────────────────────────────────
 
+void NoteStore::recoverIfInterrupted(const std::string& path) {
+  // A save that was cut short between setting the old file aside and moving the
+  // new one in leaves the notes under .bak. Without this the book would simply
+  // read as having none.
+  if (Storage.exists(path.c_str())) return;
+  const std::string bakPath = path + ".bak";
+  if (!Storage.exists(bakPath.c_str())) return;
+  if (Storage.rename(bakPath.c_str(), path.c_str())) {
+    LOG_INF(LOG_TAG, "Recovered interrupted notes save: %s", path.c_str());
+  }
+}
+
 void NoteStore::loadForBook(const char* filePath, const char* /*bookType*/) {
   if (loaded && bookFilePath == filePath) return;
   unload();
   bookFilePath = filePath;
   const std::string path = notesFilePath(filePath);
+  recoverIfInterrupted(path);
   if (Storage.exists(path.c_str())) {
     if (!loadFromFile(path)) {
       LOG_ERR(LOG_TAG, "Failed to load notes from %s", path.c_str());
@@ -57,6 +70,11 @@ bool NoteStore::loadFromFile(const std::string& path) {
   if (err) {
     LOG_ERR(LOG_TAG, "JSON parse error: %s", err.c_str());
     return false;
+  }
+  const int fileVersion = doc["v"] | 0;  // 0 = written before the marker existed
+  if (fileVersion > kNotesFileVersion) {
+    LOG_ERR(LOG_TAG, "Notes file %s is version %d, newer than this firmware understands (%d) — reading what it can",
+            path.c_str(), fileVersion, kNotesFileVersion);
   }
   const JsonArray arr = doc["notes"].as<JsonArray>();
   for (const JsonObject obj : arr) {
@@ -93,6 +111,7 @@ bool NoteStore::saveToFile(const std::string& path) const {
   }
 
   JsonDocument doc;
+  doc["v"] = kNotesFileVersion;
   JsonArray arr = doc["notes"].to<JsonArray>();
   for (const Note& note : notes) {
     JsonObject obj = arr.add<JsonObject>();
@@ -119,9 +138,27 @@ bool NoteStore::saveToFile(const std::string& path) const {
     return false;
   }
 
-  // Atomic rename
-  if (Storage.exists(path.c_str())) Storage.remove(path.c_str());
-  Storage.rename(tmpPath.c_str(), path.c_str());
+  // Swap the new file in with no moment where neither exists. Removing the
+  // original first and then renaming — the obvious way — leaves the book with
+  // NO notes file at all if power is lost in between, losing every note it
+  // ever had rather than just this edit. Keep the old one aside as .bak until
+  // the new one is in place, and recover from it on load. ClippingStore does
+  // the same for the same reason.
+  const std::string bakPath = path + ".bak";
+  if (Storage.exists(path.c_str())) {
+    if (Storage.exists(bakPath.c_str())) Storage.remove(bakPath.c_str());
+    if (!Storage.rename(path.c_str(), bakPath.c_str())) {
+      LOG_ERR(LOG_TAG, "Could not set %s aside before replacing it", path.c_str());
+      Storage.remove(tmpPath.c_str());
+      return false;
+    }
+  }
+  if (!Storage.rename(tmpPath.c_str(), path.c_str())) {
+    LOG_ERR(LOG_TAG, "Could not move %s into place", tmpPath.c_str());
+    if (Storage.exists(bakPath.c_str())) Storage.rename(bakPath.c_str(), path.c_str());
+    return false;
+  }
+  if (Storage.exists(bakPath.c_str())) Storage.remove(bakPath.c_str());
   return true;
 }
 
@@ -165,8 +202,9 @@ const Note* NoteStore::getNoteForClipping(uint16_t spineIndex, uint16_t startPag
 
 // ─── Save / Delete ────────────────────────────────────────────────────────────
 
-bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
-                         uint32_t clippingTimestamp, const char* text) {
+bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16_t startPage,
+                               uint16_t startWordIndex, uint32_t clippingTimestamp, const char* text, char tag,
+                               bool applyTag) {
   // Auto-load if needed (e.g. called from EpubReaderActivity while NOTES not loaded)
   if (!loaded || bookFilePath != filePath) {
     loadForBook(filePath, "epub");
@@ -176,55 +214,34 @@ bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t sta
   const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
 
   if (idx >= 0) {
-    // Update existing — preserve tag. Also migrates a legacy (0) key forward.
+    // Update existing. Also migrates a legacy (0) key forward.
     notes[idx].clippingTimestamp = clippingTimestamp;
-    notes[idx].text = std::string(text).substr(0, NOTE_TEXT_MAX);
+    if (text != nullptr) notes[idx].text = std::string(text).substr(0, NOTE_TEXT_MAX);
+    if (applyTag) notes[idx].tag = tag;
     notes[idx].timestamp = millis();
   } else {
-    // Create new
     Note note;
     note.spineIndex = spineIndex;
     note.startPage = startPage;
     note.startWordIndex = startWordIndex;
     note.clippingTimestamp = clippingTimestamp;
-    note.text = std::string(text).substr(0, NOTE_TEXT_MAX);
+    note.text = text != nullptr ? std::string(text).substr(0, NOTE_TEXT_MAX) : std::string();
+    note.tag = applyTag ? tag : 0;
     note.timestamp = millis();
-    note.tag = 0;
     notes.push_back(std::move(note));
   }
 
   return saveToFile(path);
 }
 
+bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
+                         uint32_t clippingTimestamp, const char* text) {
+  return saveNoteAndTag(filePath, spineIndex, startPage, startWordIndex, clippingTimestamp, text, 0, false);
+}
+
 bool NoteStore::saveTag(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
                         uint32_t clippingTimestamp, char tag) {
-  // Auto-load if needed
-  if (!loaded || bookFilePath != filePath) {
-    loadForBook(filePath, "epub");
-  }
-
-  const std::string path = notesFilePath(filePath);
-  const int idx = findNoteIndex(spineIndex, startPage, startWordIndex, clippingTimestamp);
-
-  if (idx >= 0) {
-    // Update existing — preserve text. Also migrates a legacy (0) key forward.
-    notes[idx].clippingTimestamp = clippingTimestamp;
-    notes[idx].tag = tag;
-    notes[idx].timestamp = millis();
-  } else {
-    // Create new note with empty text and just the tag
-    Note note;
-    note.spineIndex = spineIndex;
-    note.startPage = startPage;
-    note.startWordIndex = startWordIndex;
-    note.clippingTimestamp = clippingTimestamp;
-    note.text = "";
-    note.timestamp = millis();
-    note.tag = tag;
-    notes.push_back(std::move(note));
-  }
-
-  return saveToFile(path);
+  return saveNoteAndTag(filePath, spineIndex, startPage, startWordIndex, clippingTimestamp, nullptr, tag, true);
 }
 
 bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
@@ -242,6 +259,34 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
 }
 
 // ─── Migration / bulk delete ────────────────────────────────────────────────
+
+uint16_t NoteStore::bindLegacyNotes(const char* filePath, const std::vector<ClippingKey>& live) {
+  if (!loaded || bookFilePath != filePath) return 0;
+  if (live.empty()) return 0;  // same reasoning as pruneMissing: never act on a failed load
+
+  uint16_t bound = 0;
+  for (Note& n : notes) {
+    if (n.clippingTimestamp != 0) continue;  // already bound
+    for (const ClippingKey& k : live) {
+      if (k.spineIndex != n.spineIndex || k.startPage != n.startPage || k.startWordIndex != n.startWordIndex) {
+        continue;
+      }
+      // A clipping made in the first second after boot has timestamp 0 itself;
+      // binding to it would leave the note legacy, so skip rather than churn.
+      if (k.timestamp != 0) {
+        n.clippingTimestamp = k.timestamp;
+        ++bound;
+      }
+      break;  // first clipping at this position wins
+    }
+  }
+
+  if (bound > 0) {
+    saveToFile(notesFilePath(filePath));
+    LOG_INF(LOG_TAG, "Bound %u legacy note(s) to their clipping for %s", bound, filePath);
+  }
+  return bound;
+}
 
 uint16_t NoteStore::pruneMissing(const char* filePath, const std::vector<ClippingKey>& live) {
   if (!loaded || bookFilePath != filePath) return 0;

@@ -242,7 +242,9 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (books.empty()) {
-    screen.centeredText(tr(STR_NO_BOOKMARKS), screen.theme().bodyText);
+    // This screen aggregates highlights, notes AND bookmarks, so the
+    // bookmarks-only wording undersold it on a first run.
+    screen.centeredText(tr(STR_NO_SAVED_ITEMS), screen.theme().bodyText);
     return;
   }
   std::vector<fui::ListItem> items;
@@ -405,13 +407,33 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
               });
               return;
             }
-            case FileBrowserAction::DeleteClippings:
-              CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
-              CLIPPINGS.clearAll();
-              // CrossInk Notes: clearing a book's clippings also clears its notes/tags,
-              // since notes anchor to clippings that no longer exist.
-              NoteStore::deleteForFilePath(entry.bookPath);
-              break;
+            case FileBrowserAction::DeleteClippings: {
+              // Confirm, as Delete Bookmarks directly above already does. This
+              // erases every highlight AND every note for the book, so it is the
+              // most destructive action on this screen — it should not be the
+              // only one that acts on a single press.
+              auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(
+                  renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE_CLIPPINGS),
+                  entry.bookTitle);
+              if (!confirmation) {
+                LOG_ERR("SVA", "OOM: clipping clear ConfirmationActivity");
+                reloadSavedBooks();
+                requestUpdate();
+                return;
+              }
+              startActivityForResult(std::move(confirmation), [this, entry](const ActivityResult& confirmation) {
+                if (!confirmation.isCancelled) {
+                  CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
+                  CLIPPINGS.clearAll();
+                  // CrossInk Notes: clearing a book's clippings also clears its
+                  // notes/tags, since notes anchor to clippings that are gone.
+                  NoteStore::deleteForFilePath(entry.bookPath);
+                }
+                reloadSavedBooks();
+                requestUpdate();
+              });
+              return;
+            }
             default:
               break;
           }

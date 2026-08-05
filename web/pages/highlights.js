@@ -15,7 +15,7 @@ function noteId(h) {
   return `note_${h.spineIndex}_${h.startPage}_${h.startWordIndex}`;
 }
 
-// ── Tabs (Session 8) ─────────────────────────────────────────────────────────
+// ── Tabs ────────────────────────────────────────────────────────────────────
 function switchTab(tabName, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
@@ -28,7 +28,7 @@ function switchTab(tabName, btn) {
   }
 }
 
-// ── Screenshots (Session 8) ──────────────────────────────────────────────────
+// ── Screenshots ─────────────────────────────────────────────────────────────
 // Reader screenshots are saved per-book under /screenshots/<BookTitle>/, while
 // home/menu screenshots land flat in /screenshots/. Recurse one level so both show up.
 async function scanScreenshots(dirPath, depth = 0) {
@@ -436,6 +436,10 @@ async function saveNote(idx) {
   const btn = textarea.closest('.highlight-card').querySelector('.btn-save-note');
 
   const tagValue = tagSelect ? tagSelect.value : '';
+  // Read the text once, here. Reading it again after the await would record
+  // whatever the user has typed since — text the device was never sent — and
+  // then flash "Saved" over it.
+  const noteText = textarea.value.trim();
 
   btn.disabled = true;
   try {
@@ -448,7 +452,7 @@ async function saveNote(idx) {
         startPage: h.startPage,
         startWordIndex: h.startWordIndex,
         timestamp: h.timestamp,
-        text: textarea.value.trim(),
+        text: noteText,
         tag: tagValue
       })
     });
@@ -458,7 +462,7 @@ async function saveNote(idx) {
     if (!currentHighlights[idx].note) {
       currentHighlights[idx].note = {};
     }
-    currentHighlights[idx].note.text = textarea.value.trim();
+    currentHighlights[idx].note.text = noteText;
     currentHighlights[idx].note.tag = tagValue;
 
     populateTagFilter();  // a tag may have just appeared or disappeared

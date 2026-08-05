@@ -2,7 +2,7 @@ _language_name: "עברית"
 _language_code: "HE"
 _order: "23"
 
-STR_CROSSINK: "CrossInk"
+STR_CROSSINK: "CrossNotes"
 STR_BOOTING: "מפעיל..."
 STR_SLEEPING: "מצב שינה"
 STR_ENTERING_SLEEP: "עובר למצב שינה"

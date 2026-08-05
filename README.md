@@ -1,6 +1,6 @@
 # CrossNotes
 
-A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.4.0.1) which is a fork of CrossPoint. CrossNotes adds annotation features for the Xteink X4 / X3. Aside from that, identical to CrossInk. CrossNotes aims to keep changes from CrossInk minimal, and as close to the original upstream code as possible. All your CrossInk clippings and settings should transfer to CrossNotes without issue.
+A fork of [CrossInk](https://github.com/uxjulia/CrossInk) (CrossInk v1.5.0) which is a fork of CrossPoint. CrossNotes adds annotation features for the Xteink X4 / X3. Aside from that, identical to CrossInk. CrossNotes aims to keep changes from CrossInk minimal, and as close to the original upstream code as possible. All your CrossInk clippings and settings should transfer to CrossNotes without issue.
 
 Download here: [Releases page](https://github.com/HilbergK/CrossNotes/releases)
 
@@ -69,7 +69,7 @@ To build from source:
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
-pio run -e tiny    # or xlarge
+pio run -e default    # or sticky
 ```
 
 ## Credits

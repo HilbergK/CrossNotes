@@ -11,6 +11,7 @@
 #include "ClippingStore.h"
 #include "NoteStore.h"
 #include "activities/Activity.h"
+#include "components/ClippingListModel.h"
 #include "components/NotesListLayout.h"
 #include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
@@ -56,23 +57,12 @@ class EpubReaderClippingListActivity final : public Activity {
   // draws a label and a subtitle, so this line is drawn over the rendered rows
   // in the space reserved by the taller rowHeight.
   std::array<std::string, 20> uiNotes;
-  // CrossInk Notes: tag filter. visibleClippings maps a row position to its
-  // index in ClippingStore, so the list can show a subset without anything else
-  // having to know: every store access goes through storeIndexFor(). An empty
-  // filter (0) means show everything.
-  std::vector<uint16_t> visibleClippings;
-  char tagFilter = 0;
-  // Row order. Added is the store's own order (clippings are appended as they
-  // are made, so that is creation order — the timestamp field cannot be used,
-  // it counts from boot and resets). Location sorts by position in the book.
-  // Deliberately not persisted: it resets to Added each time the list opens,
-  // which keeps this out of the upstream settings file.
-  enum class SortOrder : uint8_t { Added, Location };
-  SortOrder sortOrder = SortOrder::Added;
-  // Tags this book actually uses, rebuilt with the visible set. Both the filter
-  // row's visibility and the picker's contents derive from this, so they cannot
-  // disagree about whether a tag exists.
-  std::vector<char> tagsInUse;
+  // CrossInk Notes: what the list is made of — which clippings are shown, in
+  // what order, and the display-row <-> store-index mapping that follows from
+  // that. Lives in ClippingListModel so the divergence from upstream sits in a
+  // file we own. The sort order is deliberately not persisted, which keeps it
+  // out of the upstream settings file; it resets to Added on each open.
+  crossnotes::ClippingListModel model;
   OptionPopup optionPopup;
   crossnotes::NotesListLayout notesLayout;
 
@@ -87,26 +77,16 @@ class EpubReaderClippingListActivity final : public Activity {
 
   // A filter row sits above the clippings when the book uses more than one tag,
   // so the filter is reachable by scrolling up instead of through the menu.
-  // Every row index below is a *display* row: subtract filterRowOffset() to get
-  // the position within visibleClippings.
-  bool showFilterRow = false;
-  std::string filterRowLabel;
-
+  // Every row index below is a *display* row: the model converts.
+  //
+  // These forward to the model so the call sites below read the same either
+  // way; the mapping itself has one implementation, in ClippingListModel.
   void rebuildVisibleClippings();
-  int filterRowOffset() const { return showFilterRow ? 1 : 0; }
-  bool isFilterRow(int row) const { return showFilterRow && row == 0; }
-  int visibleCount() const { return static_cast<int>(visibleClippings.size()) + filterRowOffset(); }
-  size_t storeIndexFor(int row) const {
-    const int i = row - filterRowOffset();
-    return (i >= 0 && i < static_cast<int>(visibleClippings.size()))
-               ? static_cast<size_t>(visibleClippings[static_cast<size_t>(i)])
-               : 0;
-  }
-  // Inverse of storeIndexFor(): the display row showing a given store index, or
-  // -1 if the current filter hides it. Needed because the two orders diverge —
-  // the filter row offsets every row, a tag filter drops rows, and sorting
-  // reorders them — so a store index can never be assigned to selectedIndex.
-  int displayRowForStoreIndex(size_t storeIndex) const;
+  int filterRowOffset() const { return model.filterRowOffset(); }
+  bool isFilterRow(int row) const { return model.isFilterRow(row); }
+  int visibleCount() const { return model.rowCount(); }
+  size_t storeIndexFor(int row) const { return model.storeIndexFor(row); }
+  int displayRowForStoreIndex(size_t storeIndex) const { return model.displayRowForStoreIndex(storeIndex); }
   void showTagFilterMenu();
   void showSortMenu();
   // The list's own menu (filter, sort). showClippingActionMenu is the menu for

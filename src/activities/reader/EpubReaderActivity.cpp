@@ -3811,20 +3811,25 @@ void EpubReaderActivity::startClipSelection() {
       startActivityForResult(
           std::make_unique<TagPickerActivity>(renderer, mappedInput),
           [this, tagSpine, tagPage, tagWord, tagClipTimestamp](const ActivityResult& tagRes) {
+            // The clipping is already on disk; these writes are the note file,
+            // which can fail on its own (full or missing card). Saying "saved"
+            // regardless would tell the user their note was kept when it was
+            // not — and unlike the highlight, a typed note cannot be recovered.
+            bool notesSaved = true;
             if (!tagRes.isCancelled) {
               const auto& tagResult = std::get<TagResult>(tagRes.data);
-              if (tagResult.tag != 0) {
-                NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
-                              tagResult.tag);
-              }
-              if (!tagResult.noteText.empty()) {
-                NOTES.saveNote(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
-                               tagResult.noteText.c_str());
+              // One write for the whole picker result. Nothing is written when
+              // neither was given, so skipping the tag still leaves no note.
+              if (tagResult.tag != 0 || !tagResult.noteText.empty()) {
+                notesSaved = NOTES.saveNoteAndTag(
+                    getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
+                    tagResult.noteText.empty() ? nullptr : tagResult.noteText.c_str(), tagResult.tag,
+                    tagResult.tag != 0);
               }
             }
             {
               RenderLock lock(*this);
-              drawToast(renderer, tr(STR_CLIPPING_SAVED));
+              drawToast(renderer, notesSaved ? tr(STR_CLIPPING_SAVED) : tr(STR_NOTE_SAVE_FAILED));
             }
             delay(1000);
             requestUpdate();
@@ -3833,8 +3838,9 @@ void EpubReaderActivity::startClipSelection() {
     }
 
     if (clippingFeedback) {
-      // Only the failure/limit toasts reach here — the success path returns
-      // above, after the tag picker.
+      // Normally only the failure/limit toasts reach here, since the success
+      // path returns above after the tag picker — except when the clipping
+      // saved but could not be read back, which skips the picker.
       {
         RenderLock lock(*this);
         drawToast(renderer, clippingFeedback);
