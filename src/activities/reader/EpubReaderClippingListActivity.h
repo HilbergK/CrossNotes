@@ -62,6 +62,13 @@ class EpubReaderClippingListActivity final : public Activity {
   // filter (0) means show everything.
   std::vector<uint16_t> visibleClippings;
   char tagFilter = 0;
+  // Row order. Added is the store's own order (clippings are appended as they
+  // are made, so that is creation order — the timestamp field cannot be used,
+  // it counts from boot and resets). Location sorts by position in the book.
+  // Deliberately not persisted: it resets to Added each time the list opens,
+  // which keeps this out of the upstream settings file.
+  enum class SortOrder : uint8_t { Added, Location };
+  SortOrder sortOrder = SortOrder::Added;
   // Tags this book actually uses, rebuilt with the visible set. Both the filter
   // row's visibility and the picker's contents derive from this, so they cannot
   // disagree about whether a tag exists.
@@ -86,7 +93,13 @@ class EpubReaderClippingListActivity final : public Activity {
                ? static_cast<size_t>(visibleClippings[static_cast<size_t>(i)])
                : 0;
   }
+  // Inverse of storeIndexFor(): the display row showing a given store index, or
+  // -1 if the current filter hides it. Needed because the two orders diverge —
+  // the filter row offsets every row, a tag filter drops rows, and sorting
+  // reorders them — so a store index can never be assigned to selectedIndex.
+  int displayRowForStoreIndex(size_t storeIndex) const;
   void showTagFilterMenu();
+  void showSortMenu();
 
 
   static void listScreen(UiApp::ScreenType& screen, void* user);

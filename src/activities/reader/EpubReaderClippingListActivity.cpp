@@ -192,6 +192,21 @@ void EpubReaderClippingListActivity::rebuildVisibleClippings() {
     }
     visibleClippings.push_back(static_cast<uint16_t>(i));
   }
+
+  // Store order is creation order, so Added needs no work. Location reorders by
+  // position in the book; stable_sort so two clippings starting at the same word
+  // keep the order they were made in.
+  if (sortOrder == SortOrder::Location) {
+    std::stable_sort(visibleClippings.begin(), visibleClippings.end(),
+                     [](const uint16_t lhs, const uint16_t rhs) {
+                       const Clipping* a = CLIPPINGS.clippingAt(lhs);
+                       const Clipping* b = CLIPPINGS.clippingAt(rhs);
+                       if (!a || !b) return false;  // strict weak ordering: unreadable rows stay put
+                       if (a->spineIndex != b->spineIndex) return a->spineIndex < b->spineIndex;
+                       if (a->startPage != b->startPage) return a->startPage < b->startPage;
+                       return a->startWordIndex < b->startWordIndex;
+                     });
+  }
   // Offer the filter row only when there is something to choose between: more
   // than one tag in use (or a filter already applied, so it can be cleared).
   tagsInUse.clear();
@@ -295,8 +310,14 @@ void EpubReaderClippingListActivity::jumpToSelectedClipping() {
 
   const Clipping* clipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
   if (!clipping) return;
+  // clippingIndex must be a *store* index: the reader looks the clipping up
+  // again after relayout (CLIPPINGS.clippingAt) to re-find it by text. Passing
+  // the display index was correct upstream, where the two were always equal,
+  // but the filter row offsets every row by one and a tag filter drops rows
+  // entirely — so the reader would re-resolve a neighbouring highlight and, if
+  // that one happened to live in the same section, jump to its page instead.
   setResult(ClippingJumpResult{clipping->spineIndex, clipping->startPage, clipping->pageCount, clipping->paragraphIndex,
-                               static_cast<uint16_t>(selectedIndex)});
+                               static_cast<uint16_t>(storeIndexFor(selectedIndex))});
   finish();
 }
 
@@ -397,6 +418,43 @@ void EpubReaderClippingListActivity::deleteSelectedClipping() {
   requestUpdate();
 }
 
+int EpubReaderClippingListActivity::displayRowForStoreIndex(const size_t storeIndex) const {
+  for (size_t r = 0; r < visibleClippings.size(); ++r) {
+    if (static_cast<size_t>(visibleClippings[r]) == storeIndex) return static_cast<int>(r) + filterRowOffset();
+  }
+  return -1;
+}
+
+void EpubReaderClippingListActivity::showSortMenu() {
+  // Keep the clipping the user is looking at selected across the reorder,
+  // otherwise the selection stays on a row number that now holds something else.
+  const size_t keepStoreIndex =
+      (selectedIndex >= 0 && !isFilterRow(selectedIndex)) ? storeIndexFor(selectedIndex) : SIZE_MAX;
+
+  const std::vector<std::string> labels{tr(STR_SORT_BY_ADDED), tr(STR_SORT_BY_LOCATION)};
+  const int selected = sortOrder == SortOrder::Location ? 1 : 0;
+
+  optionPopup.show(StrId::STR_SORT_BY, labels, selected, [this, keepStoreIndex](const int idx) {
+    sortOrder = (idx == 1) ? SortOrder::Location : SortOrder::Added;
+    // Same reasoning as the tag filter: the detail view can be reached from
+    // here, and after reordering the selection no longer refers to the text
+    // that is on screen.
+    detailMode = false;
+    detailText.clear();
+    detailLines.clear();
+    detailLayoutWidth = 0;
+    detailPage = 0;
+    rebuildVisibleClippings();
+    const int row = (keepStoreIndex != SIZE_MAX) ? displayRowForStoreIndex(keepStoreIndex) : -1;
+    selectedIndex = row >= 0 ? row : filterRowOffset();
+    if (selectedIndex >= visibleCount()) selectedIndex = std::max(0, visibleCount() - 1);
+    // Scroll so the kept selection is actually on screen after the reorder.
+    topIndex = std::max(0, selectedIndex - std::max(0, visibleRows - 1));
+    requestUpdate();
+  });
+  requestUpdate();
+}
+
 void EpubReaderClippingListActivity::showTagFilterMenu() {
   // Offer only the tags this book actually uses, plus "All" to clear the
   // filter — an alphabet of unused symbols would be noise.
@@ -463,6 +521,7 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
     items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
   }
   items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
+  items.push_back({FileBrowserAction::SortClippings, StrId::STR_SORT_BY});
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
 
   startActivityForResult(
@@ -505,6 +564,10 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           showTagFilterMenu();
           return;
         }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::SortClippings) {
+          showSortMenu();
+          return;
+        }
         if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
           requestUpdate();
           return;
@@ -515,7 +578,12 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           if (!clipping) continue;
           if (clipping->spineIndex == selectedSpineIndex && clipping->startPage == selectedStartPage &&
               clipping->startWordIndex == selectedStartWordIndex && clipping->timestamp == selectedTimestamp) {
-            selectedIndex = static_cast<int>(i);
+            // i is a store index; selectedIndex is a display row, and
+            // deleteSelectedClipping() converts it back through storeIndexFor().
+            // Assigning i directly would convert twice and delete a neighbour.
+            const int row = displayRowForStoreIndex(i);
+            if (row < 0) break;  // hidden by the current filter; nothing to delete
+            selectedIndex = row;
             deleteSelectedClipping();
             return;
           }
