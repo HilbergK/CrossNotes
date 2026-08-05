@@ -33,13 +33,18 @@ constexpr int TOUCH_DETAIL_PAGE_LABEL_RESERVE = 24;
 constexpr unsigned long CLIPPING_DELETE_HOLD_MS = 1000;
 // KeyboardEntryActivity's line-wrapping re-measures the whole remaining
 // string on every trimmed character while it hunts for a fitting line
-// width — effectively O(n^2) in text length. That's fine for normal notes
-// but a very long note (e.g. written on the phone, up to kNoteTextMax)
-// can take long enough to trip the watchdog. Block on-device editing above
-// this length rather than risk a reboot; such notes are still fully
-// editable from Notes Connect. Kept low (not just under whatever threshold
-// happened not to crash) since typing on-device is slow anyway — long
-// notes belong on the phone regardless of the crash risk.
+// width — effectively O(n^2) in text length. Fine for a normal note,
+// unusably slow for a long one (they can reach kNoteTextMax when written
+// from the phone), so on-device editing is refused above this length and
+// the user is pointed at Notes Connect instead.
+//
+// This was originally a crash guard: the claim was that a long edit could
+// hold the loop task long enough to trip the task watchdog. That is no
+// longer true — as of CrossInk v1.5.0-rc-3 nothing subscribes any task to
+// the TWDT (upstream dropped the web server's esp_task_wdt_add, the only
+// one), and idle-task checking is off in sdkconfig. The cap stays because
+// the editor really is too slow to use at that length, not because it
+// would reboot the device. Do not restore the watchdog rationale.
 constexpr size_t EDIT_NOTE_MAX_LENGTH = 250;
 
 Rect clippingHeaderRect(const Rect& safe, const ThemeMetrics& metrics, const MappedInputManager& mappedInput) {
