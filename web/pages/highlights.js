@@ -181,6 +181,10 @@ async function selectBook(path) {
     const res = await fetch('/api/highlights?path=' + encodeURIComponent(path));
     if (!res.ok) throw new Error('Failed to load highlights');
     const highlights = await res.json();
+    // A slower response for a previously selected book must not replace the
+    // current one — saves address the device by currentBookPath plus an index
+    // into currentHighlights, so a mismatch would write to the wrong book.
+    if (currentBookPath !== path) return;
     highlights.forEach((h, i) => { h._idx = i; });
     currentHighlights = highlights;
     resetFilters();
@@ -334,7 +338,26 @@ function populateTagFilter() {
   if (sel.selectedIndex < 0) sel.value = '';
 }
 
+// Re-rendering rebuilds each card from the last saved note text, so anything
+// typed but not yet saved would be lost. Carry live textarea contents back into
+// currentHighlights first — the value stays on screen, and the card's Save
+// button still controls what reaches the device.
+function captureUnsavedEdits() {
+  currentHighlights.forEach((h, i) => {
+    const ta = document.getElementById(noteId(h));
+    if (!ta) return;
+    const typed = ta.value;
+    const saved = (h.note && h.note.text) ? h.note.text : '';
+    if (typed !== saved) {
+      if (!h.note) h.note = {};
+      h.note.text = typed;
+      h.note.unsaved = true;
+    }
+  });
+}
+
 function applyFilters() {
+  captureUnsavedEdits();
   const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
   const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
 
@@ -379,9 +402,14 @@ async function copyToClipboard(text, label) {
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
+      try {
+        ta.select();
+        document.execCommand('copy');
+      } finally {
+        // execCommand is deprecated and throws in some browsers; without this
+        // the hidden textarea would stay in the DOM.
+        document.body.removeChild(ta);
+      }
     }
     showMessage(label + ' copied', 'success');
   } catch (e) {

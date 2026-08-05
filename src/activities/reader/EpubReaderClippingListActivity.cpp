@@ -24,10 +24,6 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr fui::ActionId ACTION_ROW = 1;
-// CrossInk Notes: face used for the row subtitle (tag + chapter + note). Kept
-// as a single constant because it is bound to the list's FONT_SMALL slot AND
-// used to measure/truncate the text, which must agree.
-constexpr int SUBTITLE_FONT_ID = SMALL_FONT_ID;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
 constexpr int DETAIL_BOTTOM_RESERVE = 55;
@@ -434,9 +430,18 @@ void EpubReaderClippingListActivity::showTagFilterMenu() {
   optionPopup.show(StrId::STR_FILTER_BY_TAG, labels, selected,
                    [this, tags](const int idx) {
                      tagFilter = (idx <= 0) ? 0 : tags[static_cast<size_t>(idx - 1)];
-                     selectedIndex = 0;
+                     // Leave the detail view: the filter can be opened from it,
+                     // and afterwards the selection no longer refers to the
+                     // clipping whose text is on screen.
+                     detailMode = false;
+                     detailText.clear();
+                     detailLines.clear();
+                     detailLayoutWidth = 0;
+                     detailPage = 0;
                      topIndex = 0;
                      rebuildVisibleClippings();
+                     selectedIndex = filterRowOffset();  // first clipping, not the filter row
+                     if (selectedIndex >= visibleCount()) selectedIndex = std::max(0, visibleCount() - 1);
                      requestUpdate();
                    });
   requestUpdate();
@@ -763,7 +768,7 @@ void EpubReaderClippingListActivity::loop() {
 
 void EpubReaderClippingListActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<EpubReaderClippingListActivity*>(user);
-  if (event.value < 0 || event.value >= static_cast<int16_t>(CLIPPINGS.clippingCount())) return;
+  if (event.value < 0 || event.value >= static_cast<int16_t>(self->visibleCount())) return;
   self->selectedIndex = event.value;
   self->app.clearTapFlash();
   self->openSelectedDetail();
@@ -807,6 +812,7 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const int end = std::min(static_cast<int>(count), topIndex + visibleRows);
   for (int i = topIndex; i < end; ++i) {
     const size_t slot = static_cast<size_t>(i - topIndex);
+    if (slot >= uiLabels.size()) break;  // fixed-size row buffers
     if (isFilterRow(i)) {
       // The filter row: a normal selectable row so it can be reached by
       // scrolling up, with no chapter or note line beneath it.

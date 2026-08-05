@@ -245,6 +245,11 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
 
 uint16_t NoteStore::pruneMissing(const char* filePath, const std::vector<ClippingKey>& live) {
   if (!loaded || bookFilePath != filePath) return 0;
+  // Never prune against an empty set. A book with no clippings is
+  // indistinguishable here from one whose clipping file failed to load, and
+  // treating the latter as "everything is orphaned" would delete every note the
+  // book has. Refusing to act costs only a stale count until the next visit.
+  if (live.empty()) return 0;
 
   const size_t before = notes.size();
   notes.erase(std::remove_if(notes.begin(), notes.end(),
@@ -287,7 +292,7 @@ uint16_t NoteStore::countForFilePath(const std::string& filePath) {
   for (const JsonObject obj : doc["notes"].as<JsonArray>()) {
     const char* text = obj["text"] | "";
     const char* tag = obj["tag"] | "";
-    if ((text != nullptr && text[0] != ' ') || (tag != nullptr && tag[0] != ' ')) count++;
+    if ((text != nullptr && text[0] != '\0') || (tag != nullptr && tag[0] != '\0')) count++;
   }
   return count;
 }
