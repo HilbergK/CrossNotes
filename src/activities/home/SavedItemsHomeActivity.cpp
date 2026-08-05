@@ -99,7 +99,12 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
   // counts come free with the entries; the note count needs that book's notes
   // file, read once here rather than per frame.
   for (auto& b : books) {
-    b.noteCount = NoteStore::countForFilePath(b.bookPath);
+    // Only for books that still have highlights. A note is only ever shown
+    // beside its clipping, so counting notes for a book with none advertises
+    // something the user has no way to open — openSavedItems() routes on
+    // bookmarks and clippings alone. It also skips a file read and a full JSON
+    // parse for every bookmark-only book, which is most of the cost here.
+    b.noteCount = b.clippingCount > 0 ? NoteStore::countForFilePath(b.bookPath) : 0;
     // The author has its own line now, so this holds the counts alone.
     b.subtitle.clear();
     const auto append = [&b](const std::string& part) {

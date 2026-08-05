@@ -50,12 +50,14 @@ void NoteStore::loadForBook(const char* filePath, const char* /*bookType*/) {
   if (Storage.exists(path.c_str())) {
     if (!loadFromFile(path)) {
       LOG_ERR(LOG_TAG, "Failed to load notes from %s", path.c_str());
+      loadFailed = true;  // see saveToFile: do not write over what we could not read
     }
   }
   loaded = true;
 }
 
 void NoteStore::unload() {
+  loadFailed = false;
   notes.clear();
   bookFilePath.clear();
   loaded = false;
@@ -77,7 +79,12 @@ bool NoteStore::loadFromFile(const std::string& path) {
             path.c_str(), fileVersion, kNotesFileVersion);
   }
   const JsonArray arr = doc["notes"].as<JsonArray>();
-  for (const JsonObject obj : arr) {
+  for (const JsonVariant entry : arr) {
+    // A non-object row (e.g. a hand-edited "notes": [1,2,3]) would otherwise
+    // deserialise entirely to defaults and be kept as a phantom note keyed
+    // (0,0,0,0) — which can then match a real first clipping.
+    if (!entry.is<JsonObject>()) continue;
+    const JsonObject obj = entry.as<JsonObject>();
     Note note;
     note.spineIndex = obj["spineIndex"] | uint16_t(0);
     note.startPage = obj["startPage"] | uint16_t(0);
@@ -85,6 +92,9 @@ bool NoteStore::loadFromFile(const std::string& path) {
     // Missing (pre-migration files) defaults to 0 — the legacy sentinel.
     note.clippingTimestamp = obj["clippingTimestamp"] | uint32_t(0);
     note.text = obj["text"] | std::string{};
+    // kNoteTextMax was only enforced on save. A hand-edited file could hold a
+    // multi-megabyte note, and this runs on every open of that book.
+    if (note.text.size() > NOTE_TEXT_MAX) note.text.resize(NOTE_TEXT_MAX);
     note.timestamp = obj["timestamp"] | uint32_t(0);
     // tag stored as a 1-character string; 0 / missing = no tag
     const char* tagStr = obj["tag"] | "";
@@ -95,6 +105,15 @@ bool NoteStore::loadFromFile(const std::string& path) {
 }
 
 bool NoteStore::saveToFile(const std::string& path) const {
+  // The notes in memory are only a faithful picture of this file if it actually
+  // parsed. If it did not, `notes` is empty, and writing it back would replace a
+  // corrupt-but-present file with an empty one — turning a recoverable problem
+  // into permanent loss on the user's next ordinary edit. Refuse instead; the
+  // caller surfaces that as "Could not save note".
+  if (loadFailed) {
+    LOG_ERR(LOG_TAG, "Refusing to overwrite %s — its existing contents could not be read", path.c_str());
+    return false;
+  }
   // Ensure directory exists
   if (!Storage.exists(NOTES_DIR)) {
     Storage.mkdir(NOTES_DIR);
@@ -129,11 +148,18 @@ bool NoteStore::saveToFile(const std::string& path) const {
     }
   }
 
+  // Compare against the expected length, not just against zero. On a full card
+  // serializeJson returns a short-but-nonzero count, which a "== 0" check lets
+  // through — the truncated .tmp then gets renamed over a perfectly good file
+  // and the .bak is deleted in the same breath, destroying the notes while
+  // reporting success. Checked here, before anything is renamed.
+  const size_t expected = measureJson(doc);
   const size_t written = serializeJson(doc, file);
-  file.sync();
+  const bool synced = file.sync();
   file.close();
-  if (written == 0) {
-    LOG_ERR(LOG_TAG, "serializeJson wrote 0 bytes to %s", tmpPath.c_str());
+  if (!synced || written != expected) {
+    LOG_ERR(LOG_TAG, "Short write to %s (%u of %u bytes, sync %s) — card full?", tmpPath.c_str(),
+            static_cast<unsigned>(written), static_cast<unsigned>(expected), synced ? "ok" : "FAILED");
     Storage.remove(tmpPath.c_str());
     return false;
   }

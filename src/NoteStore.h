@@ -139,6 +139,9 @@ class NoteStore {
   int findNoteIndex(uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex, uint32_t clippingTimestamp) const;
 
   bool loaded = false;
+  // Set when the book's notes file existed but would not parse. Blocks writes
+  // so a corrupt file is never silently replaced by an empty one.
+  bool loadFailed = false;
   std::string bookFilePath;
   std::vector<Note> notes;
 };

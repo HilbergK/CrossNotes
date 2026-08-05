@@ -209,9 +209,17 @@ function exportNotes() {
   }
 
   const title = currentBookTitle();
+  const shown = filteredHighlights();
+  if (shown.length === 0) {
+    showMessage('No highlights match the current filter.', 'error');
+    return;
+  }
   const lines = [`# ${title}`, ''];
+  if (shown.length !== currentHighlights.length) {
+    lines.push(`_${shown.length} of ${currentHighlights.length} highlights (filtered)_`, '');
+  }
 
-  currentHighlights.forEach(h => {
+  shown.forEach(h => {
     const chapter = h.chapterTitle || 'Unknown Chapter';
     const tag = (h.note && h.note.tag) ? ` (${h.note.tag})` : '';
     lines.push(`## ${chapter}${tag}`);
@@ -298,7 +306,7 @@ function renderHighlights(highlights) {
           <button class="btn-copy" onclick="copyHighlight(${idx}, 'both')">both</button>` : ''}
         </span>
         <span class="save-status" id="status_${idx}">Saved</span>
-        <button class="btn-delete-note" onclick="deleteNoteConfirm(${idx})">Delete</button>
+        <button class="btn-delete-note" onclick="deleteNoteConfirm(${idx})">Delete note</button>
         <button class="btn-clear-note" onclick="clearNote(${idx})">Clear</button>
         <button class="btn-save-note" onclick="saveNote(${idx})">Save Note</button>
       </div>
@@ -356,12 +364,13 @@ function captureUnsavedEdits() {
   });
 }
 
-function applyFilters() {
-  captureUnsavedEdits();
+// The highlights currently passing the search box and tag filter. Export uses
+// this too, so what you download matches what you are looking at.
+function filteredHighlights() {
   const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
   const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
 
-  const shown = currentHighlights.filter(h => {
+  return currentHighlights.filter(h => {
     const tag = (h.note && h.note.tag) ? h.note.tag : '';
     if (tagSel === '*any' && !tag) return false;
     if (tagSel === '*none' && tag) return false;
@@ -373,6 +382,13 @@ function applyFilters() {
            note.toLowerCase().includes(q) ||
            (h.chapterTitle || '').toLowerCase().includes(q);
   });
+}
+
+function applyFilters() {
+  captureUnsavedEdits();
+  const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
+  const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
+  const shown = filteredHighlights();
 
   const count = document.getElementById('filter-count');
   if (count) {
