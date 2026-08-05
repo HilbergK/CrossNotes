@@ -181,17 +181,22 @@ EpubReaderClippingListActivity::EpubReaderClippingListActivity(GfxRenderer& rend
 
 void EpubReaderClippingListActivity::rebuildVisibleClippings() {
   visibleClippings.clear();
+  tagsInUse.clear();
   const size_t total = CLIPPINGS.clippingCount();
   visibleClippings.reserve(total);
+  // One pass for both: the visible set and the tags in use each need this
+  // clipping's note, and looking a note up is a linear scan of the notes — so
+  // scanning twice made this O(clippings x notes) twice over.
   for (size_t i = 0; i < total; ++i) {
-    if (tagFilter != 0) {
-      const Clipping* c = CLIPPINGS.clippingAt(i);
-      if (!c) continue;
-      const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
-      if (note == nullptr || note->tag != tagFilter) continue;
-    }
+    const Clipping* c = CLIPPINGS.clippingAt(i);
+    if (!c) continue;
+    const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
+    const char tag = note != nullptr ? note->tag : 0;
+    if (tag != 0 && std::find(tagsInUse.begin(), tagsInUse.end(), tag) == tagsInUse.end()) tagsInUse.push_back(tag);
+    if (tagFilter != 0 && tag != tagFilter) continue;
     visibleClippings.push_back(static_cast<uint16_t>(i));
   }
+  std::sort(tagsInUse.begin(), tagsInUse.end());
 
   // Store order is creation order, so Added needs no work. Location reorders by
   // position in the book; stable_sort so two clippings starting at the same word
@@ -209,15 +214,6 @@ void EpubReaderClippingListActivity::rebuildVisibleClippings() {
   }
   // Offer the filter row only when there is something to choose between: more
   // than one tag in use (or a filter already applied, so it can be cleared).
-  tagsInUse.clear();
-  for (size_t i = 0; i < total; ++i) {
-    const Clipping* c = CLIPPINGS.clippingAt(i);
-    if (!c) continue;
-    const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
-    if (note == nullptr || note->tag == 0) continue;
-    if (std::find(tagsInUse.begin(), tagsInUse.end(), note->tag) == tagsInUse.end()) tagsInUse.push_back(note->tag);
-  }
-  std::sort(tagsInUse.begin(), tagsInUse.end());
   showFilterRow = tagsInUse.size() > 1 || tagFilter != 0;
   filterRowLabel = std::string(tr(STR_FILTER_BY_TAG)) + ":  " +
                    (tagFilter != 0 ? std::string(1, tagFilter) : std::string(tr(STR_ALL_TAGS)));
@@ -227,6 +223,7 @@ void EpubReaderClippingListActivity::rebuildVisibleClippings() {
   if (selectedIndex < 0) selectedIndex = 0;
   if (topIndex > selectedIndex) topIndex = selectedIndex;
   uiItems.resize(static_cast<size_t>(visibleCount()));
+  rowCacheDirty = true;  // the visible set changed, so every row has to be rebuilt
 }
 
 void EpubReaderClippingListActivity::onEnter() {
@@ -455,6 +452,40 @@ void EpubReaderClippingListActivity::showSortMenu() {
   requestUpdate();
 }
 
+void EpubReaderClippingListActivity::showListMenu(const bool ignoreInitialConfirmRelease) {
+  std::vector<FileBrowserActionActivity::MenuItem> items;
+  items.reserve(2);
+  // Filtering is only meaningful once something is tagged; offering it on an
+  // untagged book would open a picker with nothing in it.
+  if (!tagsInUse.empty()) items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
+  items.push_back({FileBrowserAction::SortClippings, StrId::STR_SORT_BY});
+
+  startActivityForResult(
+      std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, tr(STR_NOTES), std::move(items),
+                                                  ignoreInitialConfirmRelease),
+      [this](const ActivityResult& result) {
+        longPressConfirmHandled = false;
+        if (result.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
+        if (!actionResult) {
+          requestUpdate();
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::FilterTag) {
+          showTagFilterMenu();
+          return;
+        }
+        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::SortClippings) {
+          showSortMenu();
+          return;
+        }
+        requestUpdate();
+      });
+}
+
 void EpubReaderClippingListActivity::showTagFilterMenu() {
   // Offer only the tags this book actually uses, plus "All" to clear the
   // filter — an alphabet of unused symbols would be noise.
@@ -501,14 +532,12 @@ void EpubReaderClippingListActivity::showTagFilterMenu() {
 
 void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreInitialConfirmRelease) {
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
-  if (isFilterRow(selectedIndex)) {
-    showTagFilterMenu();
-    return;
-  }
+  // Reached only from the detail view, which cannot be open on the filter row.
+  if (isFilterRow(selectedIndex)) return;
 
   const Clipping* selectedClipping = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
   if (!selectedClipping) return;
-  const char* title = selectedClipping->chapterTitle[0] != '\0' ? selectedClipping->chapterTitle : tr(STR_CLIPPINGS);
+  const char* title = selectedClipping->chapterTitle[0] != '\0' ? selectedClipping->chapterTitle : tr(STR_NOTES);
   const uint16_t selectedSpineIndex = selectedClipping->spineIndex;
   const uint16_t selectedStartPage = selectedClipping->startPage;
   const uint16_t selectedStartWordIndex = selectedClipping->startWordIndex;
@@ -520,8 +549,6 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
     items.push_back({FileBrowserAction::EditTag, StrId::STR_EDIT_TAG});
     items.push_back({FileBrowserAction::EditNote, StrId::STR_EDIT_NOTE});
   }
-  items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
-  items.push_back({FileBrowserAction::SortClippings, StrId::STR_SORT_BY});
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
 
   startActivityForResult(
@@ -560,14 +587,6 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           }
           return;
         }
-        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::FilterTag) {
-          showTagFilterMenu();
-          return;
-        }
-        if (static_cast<FileBrowserAction>(actionResult->action) == FileBrowserAction::SortClippings) {
-          showSortMenu();
-          return;
-        }
         if (static_cast<FileBrowserAction>(actionResult->action) != FileBrowserAction::Delete) {
           requestUpdate();
           return;
@@ -596,9 +615,15 @@ void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping
   const Note* existing =
       NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage, clipping.startWordIndex, clipping.timestamp);
   const char currentTag = existing != nullptr ? existing->tag : 0;
+  // The tag decides both what an active filter matches and whether the filter
+  // row exists at all, so the visible set is stale the moment it changes.
+  // Remember the clipping by store index: after the rebuild it may have moved
+  // rows (the filter row appearing shifts every row) or left the list entirely.
+  const size_t editedStoreIndex =
+      (selectedIndex >= 0 && !isFilterRow(selectedIndex)) ? storeIndexFor(selectedIndex) : SIZE_MAX;
 
   startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput, currentTag),
-                         [this, clipping](const ActivityResult& result) {
+                         [this, clipping, editedStoreIndex](const ActivityResult& result) {
                            if (!result.isCancelled) {
                              const auto& tagResult = std::get<TagResult>(result.data);
                              // The picker can now return a note *and* a tag in
@@ -611,6 +636,23 @@ void EpubReaderClippingListActivity::editTagForClipping(const Clipping& clipping
                              NOTES.saveTag(CLIPPINGS.getBookFilePath().c_str(), clipping.spineIndex, clipping.startPage,
                                            clipping.startWordIndex, clipping.timestamp, tagResult.tag);
                              detailLayoutWidth = 0;  // tag changed — force detail re-layout
+                             rebuildVisibleClippings();
+                             const int row =
+                                 (editedStoreIndex != SIZE_MAX) ? displayRowForStoreIndex(editedStoreIndex) : -1;
+                             if (row >= 0) {
+                               selectedIndex = row;
+                             } else {
+                               // The new tag no longer matches the active filter, so
+                               // the clipping just left the list — and with it the
+                               // text any open detail view was showing.
+                               detailMode = false;
+                               detailText.clear();
+                               detailLines.clear();
+                               detailPage = 0;
+                               selectedIndex = filterRowOffset();
+                             }
+                             if (selectedIndex >= visibleCount()) selectedIndex = std::max(0, visibleCount() - 1);
+                             topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleCount());
                            }
                            requestUpdate();
                          });
@@ -649,6 +691,7 @@ void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clippin
                                }
                              }
                              detailLayoutWidth = 0;  // note changed — force detail re-layout
+                             rowCacheDirty = true;   // the row's note line changed
                            }
                            requestUpdate();
                          });
@@ -688,7 +731,14 @@ void EpubReaderClippingListActivity::loop() {
       mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() >= CLIPPING_DELETE_HOLD_MS) {
     longPressConfirmHandled = true;
-    showClippingActionMenu(true);
+    // In the list, hold opens the list's own menu — from any row, including the
+    // filter row. A highlight's own actions live in its detail view, which is
+    // reached by opening it.
+    if (detailMode) {
+      showClippingActionMenu(true);
+    } else {
+      showListMenu(true);
+    }
     return;
   }
 
@@ -872,6 +922,12 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(count));
   props.topIndex = static_cast<uint16_t>(topIndex);
   const int end = std::min(static_cast<int>(count), topIndex + visibleRows);
+  // Only the selection moved: the row buffers still hold the right text, and
+  // uiItems still points into them, so skip the SD reads entirely.
+  if (!rowCacheDirty && topIndex == rowCacheTopIndex && visibleRows == rowCacheRows) {
+    screen.list(props);
+    return;
+  }
   for (int i = topIndex; i < end; ++i) {
     const size_t slot = static_cast<size_t>(i - topIndex);
     if (slot >= uiLabels.size()) break;  // fixed-size row buffers
@@ -929,6 +985,9 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     }
     item.actionValue = static_cast<int16_t>(i);
   }
+  rowCacheTopIndex = topIndex;
+  rowCacheRows = visibleRows;
+  rowCacheDirty = false;
   screen.list(props);
 }
 
@@ -944,7 +1003,7 @@ void EpubReaderClippingListActivity::renderDetail() {
   const int contentY = safe.y;
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  const char* chapter = tr(STR_CLIPPINGS);
+  const char* chapter = tr(STR_NOTES);
   const Clipping* selectedClipping =
       selectedIndex >= 0 ? CLIPPINGS.clippingAt(storeIndexFor(selectedIndex)) : nullptr;
   if (selectedClipping && selectedClipping->chapterTitle[0] != '\0') {

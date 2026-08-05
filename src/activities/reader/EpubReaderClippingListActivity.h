@@ -76,6 +76,15 @@ class EpubReaderClippingListActivity final : public Activity {
   OptionPopup optionPopup;
   crossnotes::NotesListLayout notesLayout;
 
+  // Building a row reads its text off the SD card — one open/seek/read/close
+  // each, since v1.5.0 moved clipping text out of the record — and the rows are
+  // rebuilt on every render. Moving the selection redraws but changes none of
+  // that text, so without this the whole visible window was re-read from SD on
+  // every button press. Invalidated when the window moves or the data changes.
+  int rowCacheTopIndex = -1;
+  int rowCacheRows = -1;
+  bool rowCacheDirty = true;
+
   // A filter row sits above the clippings when the book uses more than one tag,
   // so the filter is reachable by scrolling up instead of through the menu.
   // Every row index below is a *display* row: subtract filterRowOffset() to get
@@ -100,6 +109,11 @@ class EpubReaderClippingListActivity final : public Activity {
   int displayRowForStoreIndex(size_t storeIndex) const;
   void showTagFilterMenu();
   void showSortMenu();
+  // The list's own menu (filter, sort). showClippingActionMenu is the menu for
+  // one highlight and belongs to the detail view, which is where a highlight is
+  // already open — offering it from the list too put per-item actions on a row
+  // the user had not chosen to act on.
+  void showListMenu(bool ignoreInitialConfirmRelease);
 
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
