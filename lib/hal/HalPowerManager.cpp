@@ -122,7 +122,15 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // guarantees that ordering).
   freeink::PowerManager::powerDownRailsForSleep();
 
-  freeink::PowerManager::deepSleepUntilPowerButton();
+  // The SDK convenience helper currently isolates every GPIO after arming the
+  // wake source. On the ESP32-C3 that overwrites the power pin's sleep input
+  // configuration, so short presses can be missed. Isolate first, then restore
+  // and arm the board-configured power pin immediately before sleeping.
+  freeink::PowerManager::waitForPowerButtonRelease();
+  esp_sleep_config_gpio_isolate();
+  freeink::PowerManager::armPowerButtonWakeup();
+  gpio_deep_sleep_hold_en();
+  esp_deep_sleep_start();
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {

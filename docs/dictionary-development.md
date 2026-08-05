@@ -27,7 +27,7 @@ Dictionary discovery is implemented by `DictionaryRegistry`. It checks `/.dictio
 3. Fall back to the device-generated `.qidx` sampled index.
 4. Fall back to scanning `.idx` from the beginning if the sidecar cannot be read or written.
 
-`Dictionary::resolveAltForm` uses `.syn.oft.cspt`, then `.syn.oft`, then a full `.syn` scan; `.qidx` accelerates the main `.idx` only. `Dictionary::findSimilar` uses `.idx.oft` when available; without it, suggestion generation scans a much larger range. Missing accelerator files affect speed, not correctness, as long as the uncompressed `.dict` and `.idx` exist.
+`Dictionary::resolveAltForm` uses `.syn.oft.cspt`, then `.syn.oft`, then a full `.syn` scan. `Dictionary::findSimilar` uses `.idx.oft` when available and otherwise uses `.qidx` to scan a bounded neighborhood. If neither index accelerator is usable, spelling suggestions are skipped so a large dictionary cannot block the reader UI; direct lookup still works with the uncompressed `.dict` and `.idx` files.
 
 `.qidx` uses a 20-byte little-endian header containing `QIDX`, format version, sample interval, sample count, and source `.idx` size, followed by the byte offset of every 256th `.idx` entry. It is written through a temporary file and installed only after the complete scan succeeds. A size mismatch or invalid header causes it to be rebuilt.
 

@@ -332,7 +332,7 @@ void drawMissingBookCover(const GfxRenderer& renderer, const Rect& coverRect, co
   renderer.drawLine(placeholderRect.x, dividerY, placeholderRect.x + placeholderRect.width - 1, dividerY, true);
 
   constexpr int iconSize = 32;
-  drawLucideIcon(renderer, icon_image_32, placeholderRect.x + (placeholderRect.width - iconSize) / 2,
+  drawLucideIcon(renderer, icon_book_open_32, placeholderRect.x + (placeholderRect.width - iconSize) / 2,
                  placeholderRect.y + (placeholderRect.height / 3 - iconSize) / 2);
 
   constexpr int textPadding = 16;

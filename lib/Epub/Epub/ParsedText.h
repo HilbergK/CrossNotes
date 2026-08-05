@@ -33,6 +33,15 @@ class ParsedText {
   std::vector<uint8_t> wordBionicBoundary;  // UTF-8 byte offset where the regular suffix starts; 0 = no split
   std::vector<bool> wordGuideDotBefore;     // true = virtual guide dot belongs between previous token and this one
   std::vector<uint8_t> wordBackgroundBlack;
+  // Layout-only text coordinates. The rendered page never retains these; use
+  // compact deltas while a paragraph is pending to protect C3 heap headroom.
+  struct VisibleOffsetRebase {
+    size_t wordIndex;
+    uint32_t base;
+  };
+  std::vector<uint16_t> wordVisibleOffsetDeltas;
+  uint32_t visibleOffsetBase = 0;
+  std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   bool extraParagraphSpacing;
   bool forceParagraphIndents;
@@ -76,12 +85,17 @@ class ParsedText {
                             ArenaVector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   bool splitPathologicalTokenAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                                      ArenaVector<uint16_t>& wordWidths);
+  uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
+  uint32_t visibleOffsetAt(size_t wordIndex) const;
+  void pushVisibleOffset(uint32_t offset);
+  void insertVisibleOffset(size_t wordIndex, uint32_t offset);
+  void eraseVisibleOffsetPrefix(size_t count);
   bool extractLine(Arena& scratchArena, size_t breakIndex, int pageWidth, const ArenaVector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                    const ArenaVector<int16_t>& naturalGaps, const ArenaVector<uint8_t>& gapSlots,
                    const ArenaVector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
-                   int fontId);
+                   const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
+                   const GfxRenderer& renderer, int fontId);
   bool calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const GfxRenderer& renderer, int fontId);
 
  public:
@@ -100,7 +114,7 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               bool backgroundBlack = false, uint8_t linkId = 0);
+               bool backgroundBlack = false, uint8_t linkId = 0, uint32_t visibleTextOffset = 0);
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
   EpdFontFamily::Style getWordStyleAt(size_t index) const {
@@ -114,7 +128,7 @@ class ParsedText {
   bool isEmpty() const { return words.empty(); }
   bool isContinuation() const { return isContinuation_; }
   bool layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                             const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
                              bool includeLastLine = true);
   bool layoutAndExtractLinesPreservingSource(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine) const;

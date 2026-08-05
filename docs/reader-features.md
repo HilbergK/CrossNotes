@@ -117,12 +117,15 @@ You can:
 ## Clippings And Highlights
 
 CrossInk supports EPUB text clippings from the reader. Use **Create Clipping**
-from the reader menu, select text on the current page, and save it.
+from the reader menu or a configured shortcut, select text, and save it.
 
 On button devices, move the cursor with the direction buttons, press **Select**
 at the first word, move to the last word, then press **Done**. On touchscreen
-devices, tap the first word and then the last word. You can also press and hold
-on the first word, drag across the text, and release to save the clipping.
+devices, a tap saves the single word you touch. To save a range, touch and hold
+the first word until range selection begins, drag to the last word, then lift
+your finger; CrossInk saves the clipping immediately. A touch drag does not
+turn pages, so use the direction buttons if a clipping must extend to another
+page.
 
 A saved clipping is used in three ways:
 
@@ -133,6 +136,14 @@ A saved clipping is used in three ways:
 The in-app clipping list is stored separately from the text export. Deleting a
 clipping from CrossInk removes the saved clipping and highlight from the device
 UI, but it does not rewrite old entries that were already appended to
+`/My Clippings.txt`.
+
+Open **Clippings** from the reader menu's bookmarks tab after saving a
+clipping. On touchscreen devices, tap a clipping to read its full text, swipe
+up or down to move through a long clipping, and tap **Open** to return to its
+location in the book. Touch and hold a clipping in the list, or its text in
+the detail view, to open the delete action. Deleting removes the in-app
+clipping and its highlight, not an entry already exported to
 `/My Clippings.txt`.
 
 ## Reading Stats

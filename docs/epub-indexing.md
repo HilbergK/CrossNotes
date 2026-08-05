@@ -69,6 +69,13 @@ unbuilt part of the chapter, or turn pages faster than the background work can
 stay ahead. That is normal: CrossInk is building just enough additional pages
 to make the requested position readable.
 
+KOReader Sync uses the same content location rather than the other device's
+page number. If a synced location is beyond this device's saved incremental
+prefix, CrossInk indexes forward until that location is available. Switching
+between Incremental and Full Section does not change the saved reading location:
+Full Section resolves it as soon as the chapter is built, while Incremental only
+builds through the requested content.
+
 ## Changing The Setting
 
 To change the default for future EPUBs, open **Settings → Reader → Indexing

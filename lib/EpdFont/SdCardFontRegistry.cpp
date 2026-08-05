@@ -29,16 +29,6 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findClosestFile(uint8_t targetSi
   return best;
 }
 
-const SdCardFontFileInfo* SdCardFontFamilyInfo::selectFile(uint8_t targetSize, uint8_t sizeStep, uint8_t style) const {
-  const std::vector<uint8_t> sizes = availableSizes();
-  if (!sizes.empty()) {
-    if (sizeStep >= sizes.size()) sizeStep = static_cast<uint8_t>(sizes.size() - 1);
-    const SdCardFontFileInfo* selected = findFile(sizes[sizeStep], style);
-    if (selected) return selected;
-  }
-  return findClosestFile(targetSize, style);
-}
-
 bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
   for (const auto& f : files) {
     if (f.pointSize == size) return true;

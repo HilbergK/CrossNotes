@@ -139,7 +139,11 @@ bool KOReaderSyncActivity::ensureLocalProgressLoaded() {
   }
 
   if (currentSpineIndex < 0 || currentSpineIndex >= epub->getSpineItemsCount()) currentSpineIndex = 0;
-  const CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPagesInSpine};
+  if (progress.hasVisibleTextOffset) {
+    localPos.visibleTextOffset = progress.visibleTextOffset;
+    localPos.hasVisibleTextOffset = true;
+  }
   const PositionCoordinateSpace coordinateSpace = primaryMatchMethod == DocumentMatchMethod::FILENAME
                                                       ? PositionCoordinateSpace::SourceDocument
                                                       : PositionCoordinateSpace::CurrentDocument;
@@ -159,7 +163,9 @@ void KOReaderSyncActivity::saveProgressAndReturn(const CrossPointPosition& posit
     LOG_DBG("KOSync", "Adjusted remote page count before save: page=%d count=%d -> %d", position.pageNumber,
             position.totalPages, pageCount);
   }
-  if (!EpubReaderUtils::saveProgress(*epub, position.spineIndex, position.pageNumber, pageCount)) {
+  const std::optional<uint32_t> visibleTextOffset =
+      position.hasVisibleTextOffset ? std::optional<uint32_t>(position.visibleTextOffset) : std::nullopt;
+  if (!EpubReaderUtils::saveProgress(*epub, position.spineIndex, position.pageNumber, pageCount, visibleTextOffset)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -172,7 +178,7 @@ void KOReaderSyncActivity::saveProgressAndReturn(const CrossPointPosition& posit
   returnToReader();
 }
 
-void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
+void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath, false, false, true); }
 
 bool KOReaderSyncActivity::consumeInitialConfirmRelease() {
   if (!lockInitialConfirmRelease) {
@@ -360,12 +366,26 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
-  if (!usedRichPosition &&
-      (remotePosition.hasLiIndex || remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex)) {
+  // Refine page using the content-offset LUT first, then structural anchors.
+  // A partial cache deliberately returns no page for an offset outside its
+  // watermark; preserving that offset lets the reader index through to it.
+  if (!usedRichPosition && (remotePosition.hasVisibleTextOffset || remotePosition.hasLiIndex ||
+                            remotePosition.xpathAnchorId[0] != '\0' || remotePosition.hasParagraphIndex)) {
     Section tempSection(epub, remotePosition.spineIndex, renderer);
     bool refined = false;
-    if (remotePosition.hasLiIndex) {
+    if (remotePosition.hasVisibleTextOffset) {
+      const auto contentPage = tempSection.getPageForVisibleTextOffset(remotePosition.visibleTextOffset, true);
+      if (contentPage.has_value()) {
+        LOG_DBG("KOSync", "Visible offset %lu -> page %d (was %d)",
+                static_cast<unsigned long>(remotePosition.visibleTextOffset), *contentPage, remotePosition.pageNumber);
+        remotePosition.pageNumber = *contentPage;
+        refined = true;
+      } else {
+        LOG_DBG("KOSync", "Visible offset %lu is beyond the cached section watermark",
+                static_cast<unsigned long>(remotePosition.visibleTextOffset));
+      }
+    }
+    if (!refined && remotePosition.hasLiIndex) {
       const auto liPage = tempSection.getPageForListItemIndex(remotePosition.liIndex);
       if (liPage.has_value()) {
         LOG_DBG("KOSync", "Li index %u -> page %d (was %d)", remotePosition.liIndex, *liPage,

@@ -83,8 +83,9 @@ class Wrapper {
  public:
   Wrapper(const WrapMetrics& metrics, const Measurer& measure, const LineSink& sink);
 
-  void onSpan(const StyledSpan& span);  // process one span; emit completed lines to the sink
-  void finish();                        // flush the trailing in-progress line
+  void onSpan(const StyledSpan& span);                        // process one span; emit completed lines to the sink
+  void lineBreak(uint8_t indent = 0, bool listItem = false);  // flush and begin a new logical line
+  void finish();                                              // flush the trailing in-progress line
 
  private:
   int getMixedWidth(const char* text, EpdFontFamily::Style style);

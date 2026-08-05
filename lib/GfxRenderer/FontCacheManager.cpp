@@ -19,11 +19,13 @@ void FontCacheManager::clearCache() {
   }
 }
 
-bool FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask) {
+bool FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask,
+                                    const PreparationPolicy policy) {
   // SD card font prewarm path: prewarm all requested styles in one call
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {
-    int missed = it->second->prewarm(utf8Text, styleMask);
+    int missed =
+        it->second->prewarm(utf8Text, styleMask, /*metadataOnly=*/false, policy != PreparationPolicy::DictionaryLean);
     if (missed > 0) {
       LOG_DBG("FCM", "prewarmCache(SD): %d glyph(s) not found (styleMask=0x%02X)", missed, styleMask);
     }
@@ -84,7 +86,8 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 
 // --- PrewarmScope implementation ---
 
-FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manager_(&manager) {
+FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager, const PreparationPolicy policy)
+    : manager_(&manager), policy_(policy) {
   manager_->scanMode_ = ScanMode::Scanning;
   manager_->clearCache();
   manager_->resetStats();
@@ -105,7 +108,7 @@ bool FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   }
   if (styleMask == 0) styleMask = 1;  // default to regular
 
-  const bool ok = manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str(), styleMask);
+  const bool ok = manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str(), styleMask, policy_);
 
   // Keep the grown capacity around so the next page can reuse it without
   // another allocate-grow-shrink cycle.
@@ -121,8 +124,10 @@ FontCacheManager::PrewarmScope::~PrewarmScope() {
 }
 
 FontCacheManager::PrewarmScope::PrewarmScope(PrewarmScope&& other) noexcept
-    : manager_(other.manager_), active_(other.active_) {
+    : manager_(other.manager_), policy_(other.policy_), active_(other.active_) {
   other.active_ = false;
 }
 
-FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope() { return PrewarmScope(*this); }
+FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope(const PreparationPolicy policy) {
+  return PrewarmScope(*this, policy);
+}

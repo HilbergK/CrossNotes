@@ -2,6 +2,7 @@
 #include <FreeInkApp.h>
 #include <FreeInkUIGfxRenderer.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -12,7 +13,8 @@
 
 class LookedUpWordsActivity final : public Activity {
  public:
-  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookCachePath);
+  explicit LookedUpWordsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookCachePath,
+                                 const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0);
 
   void onEnter() override;
   void onExit() override;
@@ -29,6 +31,8 @@ class LookedUpWordsActivity final : public Activity {
   void reloadEntries();
 
   std::string cachePath;
+  char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
   std::vector<LookupHistory::Entry> entries;
   std::vector<std::string> labels;
   std::vector<freeink::ui::ListItem> uiItems;

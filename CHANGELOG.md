@@ -78,12 +78,21 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 ---
 ## [v1.5.0] - 2026-07-29
 
+---
+
+## [v1.5.0] - 2026-08-04
+
 ### Added
 
+- EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
 - Touch support for Seeed Studio Sticky
 - Nearby File Transfer can send EPUB, TXT, XTC, XTCH, PNG, and BMP files directly between two CrossInk devices without a Wi-Fi network.
 - Recent Books and image-file long-press actions can send files directly to a nearby CrossInk device.
-- Dictionary lookup and lookup history.
+- Dictionary lookup and lookup history
+- EPUB books can use a dedicated SD-card dictionary font while keeping a different reader font.
+- EPUB books can set a dedicated dictionary font size independently of the reader font size.
+- Dictionary font and size defaults can be set globally from Settings > Reader > Font Options, with per-book choices still taking precedence.
+- Reusable dictionary SD-font builder with IPA coverage and per-family ZIP packaging
 - RTC-enabled devices can now choose the date format and numeric separator shown in headers from Settings > System > Device.
 - The web EPUB optimizer now splits oversized chapters into memory-friendlier sections before sending them to the reader.
 - Reader indexing can now use `Incremental` or `Full Section` mode globally or per book; changing modes keeps the current chapter readable and applies when the next chapter needs indexing.
@@ -95,8 +104,13 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ### Changed
 
+- Reader font sizes now persist as actual point sizes, keeping the closest matching size when font families or installed files change.
 - SD-card fonts now include the built-in reader fallback stack for common symbols, emoji, and selected CJK glyphs while retaining Noto Sans fallback coverage.
 - Downloadable SD-card fonts are now rendered with the same darker anti-aliasing as the built-in reading fonts.
+- Full-section EPUB indexing now prepares one-page chapters and direct jumps to a chapter's last page, while avoiding repeated checks after the next chapter is ready.
+- EPUB grayscale rendering now reuses its 8 KB strip buffer across stable pages, reducing repeated heap allocation and release during long reading sessions.
+- Reading progress is now saved in batches during ordinary page turns, immediately after layout changes, and when leaving a book, reducing repeated SD-card writes without carrying stale pagination into the next session.
+- SD-card font discovery now waits until a custom font is selected or font settings are opened, reducing SD-card work during normal startup with built-in fonts.
 - EPUB page turns using SD-card fonts now prepare the next page's glyphs while the reader is idle.
 - Dictionary lookups now reuse open index files for stem matching, reducing repeated SD-card work after a miss.
 - The web file manager now batches directory listings into fewer network packets, improving large-folder response time.
@@ -117,8 +131,20 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ### Fixed
 
+- KOReader Sync now resolves saved text offsets from completed EPUB caches instead of falling back to less precise page estimates.
+- Power-button wake hold timing no longer varies with SD-card initialization time.
+- EPUB reflows no longer reject a chapter before parsing when heap fragmentation leaves the general background-build threshold only slightly short; genuinely large table, font-prewarm, and image allocations remain protected by their own memory checks.
+- EPUB layout now silently retries once with a fresh heap before showing a chapter-memory error or moving through fallback rendering modes.
+- EPUB background indexing now yields to button and touch input, and changing reader settings during indexing no longer risks reading from a closed SD file.
+- EPUB clipping selection can now advance through dense one- and two-page chapter endings instead of stopping mid-page.
+- SD-card font preparation now consolidates temporary glyph, kerning, and layout-metric work into one short-lived allocation, preserving more contiguous memory when returning Home after reading or dictionary use.
+- SD-card font layout metric tables now reuse their existing storage during normal updates instead of reallocating the persistent table each time.
+- EPUB reflow and KOReader Sync now return to the same text after font, orientation, or indexing-method changes instead of relying only on page percentages.
+- Bionic Reading no longer lets letters overlap at the bold-to-regular split in EPUB words.
+- The web settings page now hides settings on devices that don't support it.
+- Changing an SD-card reader font no longer leaves preview font caches consuming the contiguous memory needed to rebuild an existing book's layout.
 - Syncing the clock on memory-constrained X3/X4 devices no longer risks a reboot while saving settings.
-- EPUB clipping selection markers now remain visible in dark mode.
+- EPUB clipping cursors and selected text now use a high-contrast gray marker with black text in dark mode.
 - EPUB clipping highlights now re-match their saved text after font or layout changes, even when the page count stays the same.
 - EPUB low-memory rendering fallbacks now apply consistently when opening chapters, prefetching pages, and preparing the sleep screen.
 - When Embedded Style is off, EPUB opening now consistently skips unused stylesheet discovery; optional location metadata is deferred until the first page is ready.
@@ -144,7 +170,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Low-memory EPUB layout now fails cleanly when page or image elements cannot be allocated instead of risking a reboot.
 - EPUB background indexing now waits for sufficient contiguous memory instead of starting a layout pass that is likely to fail.
 - KOReader Sync now uses a smaller TLS footprint and can start safely when reader heap is fragmented.
-- Web file transfers now keep the active request task registered with the watchdog, and low-memory EPUB grayscale falls back without leaving a stale display baseline.
+- Web file transfers no longer reboot when clients stall at the network timeout, and low-memory EPUB grayscale falls back without leaving a stale display baseline.
 - KOReader authentication and progress sync now reconnect through WiFi selection when the saved WiFi state has no active station address.
 - File Transfer now loads web settings with less memory and exits promptly when browser connections stall.
 - Manual screen refreshes now preserve text anti-aliasing while reading EPUB and TXT books.
@@ -171,6 +197,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 - Returning to Home after reading with an SD card font now releases the reader's font caches so covers and thumbnails retain enough contiguous memory to render.
 - EPUB footnote and cross-reference previews now show the whole note. Previews of notes whose link target sits in the middle of a paragraph no longer start mid-sentence with the opening text missing.
+- XTCH books no longer show a memory error after opening or changing reader settings on X3/X4 devices.
 
 ## [v1.4.0.1] - 2026-07-28
 

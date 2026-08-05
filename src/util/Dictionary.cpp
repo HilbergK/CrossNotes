@@ -594,7 +594,8 @@ bool Dictionary::binarySearchCspt(HalFile& cspt, const char* target, uint32_t id
 }
 
 bool Dictionary::binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const uint32_t sampleCount, const char* target,
-                                        const uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte) {
+                                        const uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte,
+                                        uint32_t* matchedSample) {
   if (sampleCount == 0) return false;
   uint32_t lo = 0;
   uint32_t hi = sampleCount - 1;
@@ -618,6 +619,7 @@ bool Dictionary::binarySearchQuickIndex(HalFile& qidx, HalFile& idx, const uint3
   } else {
     *endByte = idxFileSize;
   }
+  if (matchedSample) *matchedSample = lo;
   return true;
 }
 
@@ -1318,17 +1320,37 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
 
   HalFile oft;
   const bool hasOft = suffixBytes == 8 && Storage.openFileForRead("DICT", dp.idxOft().c_str(), oft);
+  HalFile qidx;
+  QidxHeader qidxHeader;
+  uint32_t qidxSample = 0;
+  bool hasQidx = false;
 
   if (hasOft) {
     findPageBounds(oft, idx, idxFileSize, word.c_str(), &centerStart, &centerEnd);
+  } else if (Storage.openFileForRead("DICT", dp.quickIdx().c_str(), qidx)) {
+    qidxHeader = readQidxHeader(qidx, idxFileSize);
+    hasQidx = qidxHeader.valid && qidxHeader.sampleCount > 0 &&
+              binarySearchQuickIndex(qidx, idx, qidxHeader.sampleCount, word.c_str(), idxFileSize, &centerStart,
+                                     &centerEnd, &qidxSample);
+    if (!hasQidx) qidx.close();
   }
 
-  // Extend the scan window by ±7 pages around the found neighbourhood page.
-  // Each page is approximately (centerEnd - centerStart) bytes.
+  if (!hasOft && !hasQidx) {
+    // Suggestion generation runs on the main activity task. A full .idx scan
+    // here blocks input for minutes on large dictionaries, making the device
+    // appear frozen. Direct lookup remains available without an accelerator.
+    LOG_DBG("DICT", "Skipping suggestions: no usable index accelerator");
+    idx.close();
+    return {};
+  }
+
+  // Extend the OFT scan window by ±7 pages around the found neighbourhood.
+  // A QIDX sample already spans 256 entries, so one adjacent sample on either
+  // side provides a similarly bounded fuzzy-search window.
   const uint32_t pageSize = (centerEnd > centerStart) ? (centerEnd - centerStart) : 1;
   static constexpr uint32_t PAGE_RADIUS = 7;
-  const uint32_t scanStart = (centerStart > PAGE_RADIUS * pageSize) ? (centerStart - PAGE_RADIUS * pageSize) : 0;
-  const uint32_t scanEnd = std::min(idxFileSize, centerEnd + PAGE_RADIUS * pageSize);
+  uint32_t scanStart = (centerStart > PAGE_RADIUS * pageSize) ? (centerStart - PAGE_RADIUS * pageSize) : 0;
+  uint32_t scanEnd = std::min(idxFileSize, centerEnd + PAGE_RADIUS * pageSize);
 
   if (hasOft) {
     // Snap scanStart back to the page boundary containing it. OFT entries are
@@ -1363,6 +1385,23 @@ std::vector<std::string> Dictionary::findSimilar(const std::string& word, int ma
 
     idx.seekSet(snappedStart);
   } else {
+    uint32_t adjacentOffset = 0;
+    if (qidxSample > 0 && readQidxOffset(qidx, qidxSample - 1, &adjacentOffset) && adjacentOffset < centerStart) {
+      scanStart = adjacentOffset;
+    } else {
+      scanStart = centerStart;
+    }
+    if (qidxSample + 2 < qidxHeader.sampleCount) {
+      if (readQidxOffset(qidx, qidxSample + 2, &adjacentOffset) && adjacentOffset > centerEnd &&
+          adjacentOffset <= idxFileSize) {
+        scanEnd = adjacentOffset;
+      } else {
+        scanEnd = centerEnd;
+      }
+    } else {
+      scanEnd = idxFileSize;
+    }
+    qidx.close();
     idx.seekSet(scanStart);
   }
 

@@ -178,11 +178,10 @@ class WordSelectNavigator {
   std::optional<Rect> renderHighlightDifferential(GfxRenderer& renderer, int lineHeight, int prevWordIdx,
                                                   int currWordIdx);
 
-  // Pixel snapshot for one rectangular framebuffer region. The pixel buffer is
-  // inline (a fixed-size array member), so the snapshot does no heap allocation
-  // — but it lives wherever its enclosing WordSelectNavigator lives, which in
-  // practice is on the heap inside DictionaryWordSelectActivity /
-  // DictionaryDefinitionActivity. Used by renderHighlightDifferential to
+  // Pixel snapshot for one rectangular framebuffer region. Storage is injected
+  // by the owning activity, allowing stacked dictionary activities to share the
+  // same fixed 4 KB buffer because only the top activity can be interacted with.
+  // Used by renderHighlightDifferential to
   // capture pixels under a highlight before it is drawn, so a later cursor move
   // can restore them and wipe the old highlight without re-rendering the page.
   //
@@ -209,9 +208,12 @@ class WordSelectNavigator {
   // wide word's bounding rect in landscape). When the requested region exceeds
   // capacity, capture() returns false and the caller falls back to a full
   // repaint instead.
-  struct HighlightSnapshot {
+  struct HighlightSnapshotStorage {
     static constexpr size_t MAX_SNAPSHOT_BYTES = 4096;
+    uint8_t bytes[MAX_SNAPSHOT_BYTES] = {};
+  };
 
+  struct HighlightSnapshot {
     // Capture the framebuffer rectangle into the internal buffer.
     // Returns true on success; false if the region exceeds capacity, is empty,
     // is out of bounds, or the renderer rejects it.
@@ -223,6 +225,10 @@ class WordSelectNavigator {
 
     bool valid() const { return bytes_ > 0; }
     void clear() { bytes_ = 0; }
+    void setStorage(HighlightSnapshotStorage* storage) {
+      clear();
+      storage_ = storage;
+    }
 
     uint16_t x() const { return x_; }
     uint16_t y() const { return y_; }
@@ -235,9 +241,15 @@ class WordSelectNavigator {
     uint16_t w_ = 0;
     uint16_t h_ = 0;
     size_t bytes_ = 0;
-    uint8_t buf_[MAX_SNAPSHOT_BYTES] = {};
+    HighlightSnapshotStorage* storage_ = nullptr;
   };
 
+  void setHighlightSnapshotStorage(HighlightSnapshotStorage* storage) { snapshot_.setStorage(storage); }
+
+  // Release the page-derived containers while a child definition activity is
+  // active. Their capacity is intentionally returned to the heap; rebuilding
+  // on Back is rare and substantially lowers the stacked modal peak.
+  void releaseWorkingSet();
   void reset();
 
  private:

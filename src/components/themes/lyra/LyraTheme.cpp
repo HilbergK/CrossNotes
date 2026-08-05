@@ -548,7 +548,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         renderer.fillRect(tileX + hPaddingInSelection,
                           tileY + hPaddingInSelection + (LyraMetrics::values.homeCoverHeight / 3), coverWidth,
                           2 * LyraMetrics::values.homeCoverHeight / 3, true);
-        drawLucideIcon(renderer, icon_image_32, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24);
+        drawLucideIcon(renderer, icon_book_open_32, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24);
       }
 
       coverBufferStored = storeCoverBuffer();

@@ -59,3 +59,33 @@ TEST(DictLayout, SameStyleSegmentsMergeInTheBorrowedView) {
   EXPECT_EQ(lines[0].text, "onetwo");
   EXPECT_EQ(lines[0].styles.size(), 1u);
 }
+
+TEST(DictLayout, OversizedTokenBreaksAtCharacterBoundaries) {
+  const std::vector<StyledSpan> spans = {{.text = "abcdefghij"}};
+  std::vector<CapturedLine> lines;
+  const DictLayout::Measurer measurer{nullptr, measure};
+  const DictLayout::LineSink sink{&lines, capture};
+
+  DictLayout::wrapSpans(spans, {.maxWidth = 4}, measurer, sink);
+
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[0].text, "abcd");
+  EXPECT_EQ(lines[1].text, "efgh");
+  EXPECT_EQ(lines[2].text, "ij");
+}
+
+TEST(DictLayout, ExplicitLineBreakFlushesStreamedText) {
+  std::vector<CapturedLine> lines;
+  const DictLayout::Measurer measurer{nullptr, measure};
+  const DictLayout::LineSink sink{&lines, capture};
+  DictLayout::Wrapper wrapper({.maxWidth = 20}, measurer, sink);
+
+  wrapper.onSpan({.text = "alpha"});
+  wrapper.lineBreak();
+  wrapper.onSpan({.text = "beta"});
+  wrapper.finish();
+
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[0].text, "alpha");
+  EXPECT_EQ(lines[1].text, "beta");
+}

@@ -19,7 +19,6 @@ struct SdCardFontFamilyInfo {
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   const SdCardFontFileInfo* findClosestFile(uint8_t targetSize, uint8_t style = 0) const;
-  const SdCardFontFileInfo* selectFile(uint8_t targetSize, uint8_t sizeStep, uint8_t style = 0) const;
   bool hasSize(uint8_t size) const;
   std::vector<uint8_t> availableSizes() const;
 };
@@ -46,6 +45,10 @@ class SdCardFontRegistry {
   bool discover();
   void clear();
 
+  // Parse a v4 .cpfont filename without allocating. Reused by the dictionary
+  // font path, which scans one selected family without retaining a catalog.
+  static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
+
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
   int getFamilyIndex(const std::string& name) const;
@@ -54,7 +57,6 @@ class SdCardFontRegistry {
  private:
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
-  static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);

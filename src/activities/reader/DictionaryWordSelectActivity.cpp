@@ -4,6 +4,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <MemoryBudget.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 #include <freertos/FreeRTOS.h>
@@ -86,17 +87,29 @@ void DictionaryWordSelectActivity::onEnter() {
   Dictionary::clearLookupDictPathOverride();
   mappedInput.setReaderTouchscreenOverride(true);
   ignoreInitialBackRelease_ = mappedInput.isPressed(MappedInputManager::Button::Back);
+  const bool consumeInitialConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+  if (!buildWorkingSet(consumeInitialConfirm)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+  autoLookupInitialWord_ = false;
+  requestUpdate();
+}
+
+bool DictionaryWordSelectActivity::buildWorkingSet(const bool consumeInitialConfirm) {
+  if (!page) {
+    LOG_ERR("DICT", "Cannot build word selection without a reader page");
+    return false;
+  }
   std::vector<WordSelectNavigator::WordInfo> words;
   std::vector<WordSelectNavigator::Row> rows;
   std::string textPool;
   textPool.reserve(512);
   extractWords(words, rows, textPool);
   mergeHyphenatedWords(words, rows, textPool);
-  // Only consume the initial Confirm release if Confirm is still held at onEnter — i.e.
-  // we were opened mid hold-to-lookup. Other entry paths (e.g. reader menu → Lookup) have
-  // already released Confirm by the time we open, so consuming would swallow the user's
-  // first deliberate tap and force them to press twice.
-  const bool consumeInitialConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   navigator.load(std::move(words), std::move(rows), std::move(textPool), consumeInitialConfirm);
 #if CROSSINK_APP_CAP_TOUCH
   navigator.setTouchDragCursorVisible(mappedInput.hasTouch());
@@ -112,14 +125,43 @@ void DictionaryWordSelectActivity::onEnter() {
       result.isCancelled = true;
       setResult(std::move(result));
       finish();
-      return;
+      return false;
     }
     touchDragLookup_ = navigator.beginTouchMultiSelect();
   }
 #else
   navigator.setTouchDragCursorVisible(false);
 #endif
-  requestUpdate();
+  return true;
+}
+
+void DictionaryWordSelectActivity::suspendWorkingSet() {
+  if (workingSetSuspended_ || !readerPageReload_) return;
+  if (const auto* selected = navigator.getSelected()) {
+    suspendedSelectionX_ = selected->screenX + selected->width / 2;
+    suspendedSelectionY_ = selected->screenY + renderer.getLineHeight(SETTINGS.getReaderFontId()) / 2;
+  }
+  navigator.releaseWorkingSet();
+  page.reset();
+  workingSetSuspended_ = true;
+  MemoryBudget::logHeapShape("dict.parent_suspended");
+}
+
+bool DictionaryWordSelectActivity::restoreWorkingSet() {
+  if (!workingSetSuspended_) return true;
+  page = readerPageReload_(readerContext_);
+  if (!page) {
+    LOG_ERR("DICT", "Failed to reload reader page after dictionary definition");
+    return false;
+  }
+  if (!buildWorkingSet(/*consumeInitialConfirm=*/false)) return false;
+  if (suspendedSelectionX_ >= 0 && suspendedSelectionY_ >= 0) {
+    navigator.selectWordAtPoint(suspendedSelectionX_, suspendedSelectionY_,
+                                renderer.getLineHeight(SETTINGS.getReaderFontId()));
+  }
+  workingSetSuspended_ = false;
+  MemoryBudget::logHeapShape("dict.parent_restored");
+  return true;
 }
 
 void DictionaryWordSelectActivity::onExit() {
@@ -192,6 +234,10 @@ void DictionaryWordSelectActivity::clearFrontButtonHintArea() {
 }
 
 void DictionaryWordSelectActivity::renderDefinitionBackground() {
+  if (!page) {
+    LOG_ERR("DICT", "Cannot redraw dictionary background without a reader page");
+    return;
+  }
   renderer.clearScreen();
 
   // Dictionary layout can evict the reader font's bitmap glyph cache. Rebuild
@@ -469,20 +515,48 @@ void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
-                                   renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(),
-                                   true, cachePath, controller.getRecordHistory(), controller.getLookupWord(),
-                                   DictionaryLookupController::toHistStatus(controller.getFoundStatus()), this,
-                                   &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback),
-                               [this](const ActivityResult& result) {
-                                 if (!result.isCancelled) {
-                                   setResult(ActivityResult{});
-                                   finish();
-                                 } else {
-                                   forceFullRepaintOnNextRender();
-                                   requestUpdate();
-                                 }
-                               });
+        // Rebuild the reader page while its font is still resident. The child
+        // then overlays the modal after swapping to the dictionary font, so we
+        // never need a second framebuffer or two live SD-font families.
+        {
+          RenderLock lock(*this);
+          renderDefinitionBackground();
+        }
+        auto definition = makeUniqueNoThrow<DictionaryDefinitionActivity>(
+            renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(), true, cachePath,
+            controller.getRecordHistory(), controller.getLookupWord(),
+            DictionaryLookupController::toHistStatus(controller.getFoundStatus()),
+            readerBackgroundRender_ ? readerContext_ : this,
+            readerBackgroundRender_ ? readerBackgroundRender_
+                                    : &DictionaryWordSelectActivity::renderDefinitionBackgroundCallback,
+            dictionaryFontFamilyName_, dictionaryFontPointSize_, true, &highlightSnapshotStorage_);
+        if (!definition) {
+          LOG_ERR("DICT", "OOM allocating DictionaryDefinitionActivity (%u bytes)",
+                  static_cast<unsigned>(sizeof(DictionaryDefinitionActivity)));
+          forceFullRepaintOnNextRender();
+          requestUpdate();
+          break;
+        }
+        suspendWorkingSet();
+        startActivityForResult(std::move(definition), [this](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            setResult(ActivityResult{});
+            finish();
+          } else {
+            {
+              RenderLock lock(*this);
+              if (!restoreWorkingSet()) {
+                ActivityResult parentResult;
+                parentResult.isCancelled = true;
+                setResult(std::move(parentResult));
+                finish();
+                return;
+              }
+            }
+            forceFullRepaintOnNextRender();
+            requestUpdate();
+          }
+        });
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:

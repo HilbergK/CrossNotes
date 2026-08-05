@@ -107,7 +107,8 @@ class ActivityManager {
   void goToRecentBooks();
   void goToBrowser();
   bool goToOpdsServer(uint32_t serverIndex, bool networkBootReady = false);
-  void goToReader(std::string path, bool suppressBackRelease = false, bool allowFastInitialRefresh = false);
+  void goToReader(std::string path, bool suppressBackRelease = false, bool allowFastInitialRefresh = false,
+                  bool cleanImageBaseOnEntry = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

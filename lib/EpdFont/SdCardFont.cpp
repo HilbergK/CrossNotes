@@ -158,7 +158,8 @@ void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
   s.kernRightClasses = nullptr;
   delete[] s.ligaturePairs;
   s.ligaturePairs = nullptr;
-  s.kernLigLoaded = false;
+  s.kernClassesLoaded = false;
+  s.ligaturesLoaded = false;
 
   s.stubData.ligaturePairs = nullptr;
   s.stubData.ligaturePairCount = 0;
@@ -225,29 +226,25 @@ void SdCardFont::clearOverflow() {
 
 // --- Per-style kern/ligature ---
 
-void SdCardFont::applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const {
+void SdCardFont::applyKernLigaturePointers(PerStyle& s, EpdFontData& data, const bool includeKerning) const {
   // Kern data uses the per-page mini tables (renumbered class IDs). The full
   // kern matrix is never resident — see PerStyle::miniKernMatrix comment.
-  data.kernLeftClasses = s.miniKernLeftClasses;
-  data.kernRightClasses = s.miniKernRightClasses;
-  data.kernMatrix = s.miniKernMatrix;
-  data.kernLeftEntryCount = s.miniKernLeftEntryCount;
-  data.kernRightEntryCount = s.miniKernRightEntryCount;
-  data.kernLeftClassCount = s.miniKernLeftClassCount;
-  data.kernRightClassCount = s.miniKernRightClassCount;
+  data.kernLeftClasses = includeKerning ? s.miniKernLeftClasses : nullptr;
+  data.kernRightClasses = includeKerning ? s.miniKernRightClasses : nullptr;
+  data.kernMatrix = includeKerning ? s.miniKernMatrix : nullptr;
+  data.kernLeftEntryCount = includeKerning ? s.miniKernLeftEntryCount : 0;
+  data.kernRightEntryCount = includeKerning ? s.miniKernRightEntryCount : 0;
+  data.kernLeftClassCount = includeKerning ? s.miniKernLeftClassCount : 0;
+  data.kernRightClassCount = includeKerning ? s.miniKernRightClassCount : 0;
   // Ligatures are small (typically < 1KB) so they stay resident.
   data.ligaturePairs = s.ligaturePairs;
   data.ligaturePairCount = s.header.ligaturePairCount;
 }
 
-bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
-  if (s.kernLigLoaded) return true;
-  bool hasKern = s.header.kernLeftEntryCount > 0;
-  bool hasLig = s.header.ligaturePairCount > 0;
-  if (!hasKern && !hasLig) {
-    s.kernLigLoaded = true;
-    return true;
-  }
+bool SdCardFont::loadStyleKernLigatureData(PerStyle& s, const bool includeKerning) {
+  const bool needKern = includeKerning && s.header.kernLeftEntryCount > 0 && !s.kernClassesLoaded;
+  const bool needLig = s.header.ligaturePairCount > 0 && !s.ligaturesLoaded;
+  if (!needKern && !needLig) return true;
 
   HalFile file;
   if (!Storage.openFileForRead("SDCF", filePath_, file)) {
@@ -255,7 +252,7 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     return false;
   }
 
-  if (hasKern) {
+  if (needKern) {
     // Load only the small class-lookup tables (~3KB each). The full matrix
     // (~36KB contiguous for Literata) is built per-page from SD in
     // buildMiniKernMatrix().
@@ -284,7 +281,7 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     }
   }
 
-  if (hasLig) {
+  if (needLig) {
     s.ligaturePairs = new (std::nothrow) EpdLigaturePair[s.header.ligaturePairCount];
     if (!s.ligaturePairs) {
       LOG_ERR("SDCF", "Failed to allocate ligature pairs");
@@ -304,7 +301,8 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     }
   }
 
-  s.kernLigLoaded = true;
+  if (needKern) s.kernClassesLoaded = true;
+  if (needLig) s.ligaturesLoaded = true;
 
   // Make ligatures visible to the stub (used when no mini data built yet).
   // Kern stays nullptr on the stub — it is only wired in miniData via
@@ -312,8 +310,8 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
   s.stubData.ligaturePairs = s.ligaturePairs;
   s.stubData.ligaturePairCount = s.header.ligaturePairCount;
 
-  LOG_DBG("SDCF", "Kern classes + lig loaded: kernL=%u, kernR=%u, ligs=%u", s.header.kernLeftEntryCount,
-          s.header.kernRightEntryCount, s.header.ligaturePairCount);
+  LOG_DBG("SDCF", "Typography data loaded: kern=%s ligs=%u", s.kernClassesLoaded ? "yes" : "no",
+          s.header.ligaturePairCount);
   return true;
 }
 
@@ -787,7 +785,7 @@ bool SdCardFont::readAdvance(uint32_t codepoint, uint8_t style, uint16_t* outAdv
 
 // --- Prewarm ---
 
-int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly) {
+int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly, const bool includeKerning) {
   lastPrewarmFailed_ = false;
   if (!loaded_) return failPrewarm(-1);
   styleMask = resolveStyleMask(styleMask);
@@ -848,7 +846,7 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
       if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
       auto& s = styles_[si];
 
-      loadStyleKernLigatureData(s);
+      loadStyleKernLigatureData(s, includeKerning);
       if (s.ligaturePairs && s.header.ligaturePairCount > 0) {
         for (uint8_t li = 0; li < s.header.ligaturePairCount && cpCount < MAX_PAGE_GLYPHS; li++) {
           uint32_t leftCp = s.ligaturePairs[li].pair >> 16;
@@ -885,7 +883,7 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
-    totalMissed += prewarmStyle(si, codepoints.get(), cpCount, metadataOnly);
+    totalMissed += prewarmStyle(si, codepoints.get(), cpCount, metadataOnly, includeKerning);
   }
 
   stats_.prewarmTotalMs = millis() - startMs;
@@ -897,7 +895,8 @@ int SdCardFont::failPrewarm(const int missed) {
   return missed;
 }
 
-int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly) {
+int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly,
+                             const bool includeKerning) {
   auto& s = styles_[styleIdx];
 
   // Idle-prewarm hit: mini data persists across PrewarmScopes (resetStyleMiniData
@@ -926,6 +925,10 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       }
     }
     if (covered) {
+      if (!metadataOnly && loadStyleKernLigatureData(s, includeKerning)) {
+        const bool kerningReady = !includeKerning || s.miniKernMatrix || buildMiniKernMatrix(s, codepoints, cpCount);
+        if (kerningReady) applyKernLigaturePointers(s, s.miniData, includeKerning);
+      }
       return missedInMini;
     }
   }
@@ -1122,10 +1125,10 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   // per-page mini kern matrix restricted to class pairs reachable from this
   // page's codepoints. Skip during metadata-only prewarm — layout only needs
   // advanceX and the mini kern would be thrown away before rendering.
-  bool kernLigOk = false;
+  bool typographyOk = false;
   if (!metadataOnly) {
-    if (loadStyleKernLigatureData(s)) {
-      kernLigOk = buildMiniKernMatrix(s, codepoints, cpCount);
+    if (loadStyleKernLigatureData(s, includeKerning)) {
+      typographyOk = !includeKerning || buildMiniKernMatrix(s, codepoints, cpCount);
     }
   }
 
@@ -1141,8 +1144,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   s.miniData.ascender = s.header.ascender;
   s.miniData.descender = s.header.descender;
   s.miniData.is2Bit = s.header.is2Bit;
-  if (kernLigOk) {
-    applyKernLigaturePointers(s, s.miniData);
+  if (typographyOk) {
+    applyKernLigaturePointers(s, s.miniData, includeKerning);
   }
   s.miniData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.miniData.glyphMissCtx = &overflowCtx_[styleIdx];
@@ -1194,6 +1197,7 @@ void SdCardFont::clearPersistentCache() {
     delete[] advanceTable_[i];
     advanceTable_[i] = nullptr;
     advanceTableSize_[i] = 0;
+    advanceTableCapacity_[i] = 0;
   }
 }
 
@@ -1217,7 +1221,33 @@ bool SdCardFont::advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16
   return false;
 }
 
-void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount) {
+bool SdCardFont::ensureAdvanceTableCapacity(const uint8_t styleIdx, const uint32_t needed) {
+  if (advanceTableCapacity_[styleIdx] >= needed) return true;
+
+  uint32_t newCapacity = advanceTableCapacity_[styleIdx] == 0 ? 1 : advanceTableCapacity_[styleIdx];
+  while (newCapacity < needed && newCapacity < ADVANCE_CACHE_LIMIT) {
+    newCapacity <<= 1;
+  }
+  if (newCapacity > ADVANCE_CACHE_LIMIT) newCapacity = ADVANCE_CACHE_LIMIT;
+
+  auto* replacement = new (std::nothrow) AdvanceEntry[newCapacity];
+  if (!replacement) {
+    LOG_ERR("SDCF", "Advance table grow failed (%u bytes, style %u, free=%u, maxAlloc=%u)",
+            static_cast<unsigned>(newCapacity * sizeof(AdvanceEntry)), styleIdx, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
+  if (advanceTable_[styleIdx] && advanceTableSize_[styleIdx] > 0) {
+    memcpy(replacement, advanceTable_[styleIdx], advanceTableSize_[styleIdx] * sizeof(AdvanceEntry));
+  }
+
+  delete[] advanceTable_[styleIdx];
+  advanceTable_[styleIdx] = replacement;
+  advanceTableCapacity_[styleIdx] = newCapacity;
+  return true;
+}
+
+void SdCardFont::mergeIntoAdvanceTable(const uint8_t styleIdx, const AdvanceEntry* sortedNew, const uint32_t newCount) {
   if (newCount == 0) return;
   const uint32_t oldSize = advanceTableSize_[styleIdx];
   if (oldSize >= ADVANCE_CACHE_LIMIT) return;  // already full
@@ -1228,9 +1258,11 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
   uint32_t mergedCap = oldSize + newCount;
   if (mergedCap > ADVANCE_CACHE_LIMIT) mergedCap = ADVANCE_CACHE_LIMIT;
 
-  AdvanceEntry* merged = new (std::nothrow) AdvanceEntry[mergedCap];
+  auto* merged = new (std::nothrow) AdvanceEntry[mergedCap];
   if (!merged) {
-    LOG_ERR("SDCF", "mergeIntoAdvanceTable: alloc failed (%u entries) style %u", mergedCap, styleIdx);
+    LOG_ERR("SDCF", "Advance merge allocation failed (%u bytes, style %u, free=%u, maxAlloc=%u)",
+            static_cast<unsigned>(mergedCap * sizeof(AdvanceEntry)), styleIdx, ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
     return;
   }
 
@@ -1245,9 +1277,13 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
     }
   }
 
-  delete[] advanceTable_[styleIdx];
-  advanceTable_[styleIdx] = merged;
+  if (!ensureAdvanceTableCapacity(styleIdx, k)) {
+    delete[] merged;
+    return;
+  }
+  memcpy(advanceTable_[styleIdx], merged, k * sizeof(AdvanceEntry));
   advanceTableSize_[styleIdx] = k;
+  delete[] merged;
 }
 
 bool SdCardFont::hasAdvanceTable() const {
@@ -1297,10 +1333,9 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
       }
       if (!cacheMissesRequestedCodepoint) continue;
 
-      delete[] advanceTable_[si];
-      advanceTable_[si] = nullptr;
       advanceTableSize_[si] = 0;
-      LOG_DBG("SDCF", "Advance table style %u: reset full cache for active text", si);
+      LOG_DBG("SDCF", "Advance table style %u: reset full cache for active text (capacity=%u)", si,
+              advanceTableCapacity_[si]);
     }
 
     // For each codepoint in `codepoints`, skip those already cached, then

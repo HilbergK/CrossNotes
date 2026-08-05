@@ -62,7 +62,10 @@ class EpubReaderMenuActivity final : public Activity {
       ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
       void* beginGlobalSettingsEditContext = nullptr, bool stablePageNumbersAvailable = false,
       ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
-      void* endGlobalSettingsEditContext = nullptr);
+      void* endGlobalSettingsEditContext = nullptr, const char* dictionaryFontFamilyName = nullptr,
+      uint8_t dictionaryFontPointSize = 0, bool hasDictionaryFontOverride = false,
+      ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      void* dictionaryFontChangedContext = nullptr);
 
   void onEnter() override;
   void onExit() override;
@@ -100,6 +103,7 @@ class EpubReaderMenuActivity final : public Activity {
   bool activateSelectedItem();
   bool handleTouchInput();
   void drawIconTabBar(Rect rect, bool drawBottomBorder);
+  static void dictionaryFontChangedForMenu(void* ctx, const char* familyName, uint8_t pointSize);
 
   // FreeInkApp hosts the menu list (themed rows, touch routing); the header
   // stays on GUI.drawHeader for the battery indicator, and OptionPopup keeps
@@ -136,6 +140,11 @@ class EpubReaderMenuActivity final : public Activity {
   bool stablePageNumbersAvailable = false;
   ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
+  char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
+  bool hasDictionaryFontOverride = false;
+  ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
+  void* dictionaryFontChangedContext = nullptr;
   bool settingsChanged = false;
 
   freeink::ui::GfxRendererTarget uiTarget;  // must precede `app`: the app holds a reference to it

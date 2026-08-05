@@ -104,7 +104,7 @@ void IntervalSelectionActivity::loop() {
   int tx = 0;
   int ty = 0;
   const int screenWidth = renderer.getScreenWidth();
-  const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
   const int barWidth = std::min(360, std::max(0, screenWidth - 40));
   constexpr int barHeight = 16;
   const int barX = std::max(0, (screenWidth - barWidth) / 2);
@@ -216,13 +216,16 @@ void IntervalSelectionActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int screenWidth = renderer.getScreenWidth();
-  const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect touchScreen = safe;
 
   // The Auto Page Turn picker has no touch back button. Keep its title in the
   // normal-height header rather than centering it in the taller touch-navigation
   // header, which puts the title against the divider.
-  const Rect header = showTouchHeaderBackButton ? TouchHeaderBackButton::headerRect(renderer, mappedInput)
-                                                : TouchHeaderBackButton::standardHeaderRect(renderer);
+  Rect header = showTouchHeaderBackButton ? TouchHeaderBackButton::headerRect(renderer, mappedInput)
+                                          : TouchHeaderBackButton::standardHeaderRect(renderer);
+  header.x = safe.x;
+  header.width = safe.width;
   if (showTouchHeaderBackButton && mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, header, I18N.get(titleId), readerActivity);
   } else {

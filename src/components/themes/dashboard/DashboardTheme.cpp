@@ -97,7 +97,7 @@ void drawMissingBookCover(const GfxRenderer& renderer, const Rect& coverRect, co
   renderer.drawRoundedRect(coverRect.x, coverRect.y, coverRect.width, coverRect.height, 1, kCoverCornerRadius, true);
 
   constexpr int iconSize = 32;
-  drawLucideIcon(renderer, icon_image_32, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36);
+  drawLucideIcon(renderer, icon_book_open_32, coverRect.x + (coverRect.width - iconSize) / 2, coverRect.y + 36);
 
   constexpr int textPadding = 14;
   const int textW = coverRect.width - textPadding * 2;
@@ -279,7 +279,7 @@ void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, cons
   } else {
     snprintf(value, sizeof(value), "-");
   }
-  drawStatsRow(renderer, rightX, rowY, value, tr(STR_TIME_LEFT), black);
+  drawStatsRow(renderer, rightX, rowY, value, tr(STR_TIME_LEFT_SHORT), black);
 
   rowY = statsBlockTop(coverRect, ++rowIndex, blockH, rowCount);
   if (progressPercent >= 0.0f) {
@@ -494,7 +494,7 @@ void drawFooterStats(const GfxRenderer& renderer, const Rect& coverRect, const G
     const int halfW = renderer.getScreenWidth() / 2;
     const int maxTextW = std::max(1, halfW - inset * 2);
     drawLeftAnchoredFooterStat(renderer, coverRect.x, centerY, maxTextW, totalTime,
-                               tr(STR_STATS_TOTAL_READING_TIME_LBL), inverted);
+                               tr(STR_STATS_TOTAL_READING_TIME_LBL_SHORT), inverted);
     const int rightX = renderer.getScreenWidth() - inset;
     drawRightAnchoredFooterStat(renderer, rightX, centerY, maxTextW, booksRead, tr(STR_STATS_COMPLETED_LBL), inverted);
     return;

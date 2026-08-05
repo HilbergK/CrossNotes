@@ -69,6 +69,10 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include <cstring>
 #include <string>
 
+#ifndef SIMULATOR
+#include <nvs.h>
+#endif
+
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -618,6 +622,42 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
+// The wake-hold verification runs before the SD card is mounted (see setup()),
+// so the one setting it needs — "short press = sleep", which makes any tap a
+// valid wake — is mirrored into NVS. Written at sleep entry (the value that
+// matters is the one in force when the device went down) and re-synced after
+// each settings load in case the device lost power without a clean sleep.
+constexpr char WAKE_NVS_NAMESPACE[] = "crosspoint";
+constexpr char WAKE_SHORT_PRESS_KEY[] = "wakeShortPr";
+
+bool readWakeShortPressFromNvs() {
+#ifdef SIMULATOR
+  return false;
+#else
+  nvs_handle_t h;
+  if (nvs_open(WAKE_NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return false;
+  uint8_t v = 0;
+  const esp_err_t e = nvs_get_u8(h, WAKE_SHORT_PRESS_KEY, &v);
+  nvs_close(h);
+  return e == ESP_OK && v != 0;
+#endif
+}
+
+void mirrorWakeShortPressToNvs() {
+#ifndef SIMULATOR
+  const uint8_t want = (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 1 : 0;
+  nvs_handle_t h;
+  if (nvs_open(WAKE_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+  uint8_t cur = 0;
+  const bool have = nvs_get_u8(h, WAKE_SHORT_PRESS_KEY, &cur) == ESP_OK;
+  if (!have || cur != want) {  // skip the flash write when unchanged
+    nvs_set_u8(h, WAKE_SHORT_PRESS_KEY, want);
+    nvs_commit(h);
+  }
+  nvs_close(h);
+#endif
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -651,6 +691,8 @@ void enterDeepSleep(bool fromTimeout) {
 
   putTiltSensorToSleepForDeepSleep();
   display.deepSleep();
+  mirrorWakeShortPressToNvs();  // next boot's wake-hold check reads this pre-SD
+  LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
 }
@@ -777,6 +819,43 @@ void setup() {
 #endif
 #endif
 
+  // Verify the wake reason BEFORE the SD mount and settings loads. The power
+  // button must still be held when the check runs (released = back to sleep),
+  // so everything ahead of it extends the real-world hold requirement — and
+  // the SD mount (per-attempt power-cycle retries on some boards) is the
+  // slowest, most variable stage of boot. Verifying here needs only gpio +
+  // powerManager; the one setting involved ("short press = sleep" makes any
+  // tap a valid wake) comes from its NVS mirror since SETTINGS lives on the
+  // not-yet-mounted SD card.
+  const auto wakeupReason = gpio.getWakeupReason();
+  LOG_INF("BOOT", "Wake route: %s", wakeupRouteName(wakeupReason));
+  switch (wakeupReason) {
+    case HalGPIO::WakeupReason::PowerButton: {
+      const bool shortPressWakes = readWakeShortPressFromNvs();
+      const uint16_t requiredDuration = shortPressWakes ? CrossPointSettings::POWER_BUTTON_WAKE_SHORT_MS
+                                                        : CrossPointSettings::POWER_BUTTON_WAKE_LONG_MS;
+      LOG_INF("BOOT", "Power-button wake: verifying duration required=%u shortAllowed=%d", requiredDuration,
+              shortPressWakes);
+      if (!gpio.verifyPowerButtonWakeup(requiredDuration, shortPressWakes)) {
+        powerManager.startDeepSleep(gpio);
+      }
+      break;
+    }
+    case HalGPIO::WakeupReason::AfterUSBPower:
+      // TEMP: continue booting while diagnosing post-flash/reset behavior.
+      // Normal behavior is to go back to sleep when USB power causes a cold boot.
+      LOG_INF("BOOT", "AfterUSBPower route: TEMP continuing boot instead of deep sleep");
+      break;
+    case HalGPIO::WakeupReason::AfterFlash:
+      // After flashing, just proceed to boot
+      LOG_INF("BOOT", "AfterFlash route: continuing boot");
+      break;
+    case HalGPIO::WakeupReason::Other:
+    default:
+      LOG_INF("BOOT", "Other wake route: continuing boot");
+      break;
+  }
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
@@ -816,33 +895,10 @@ void setup() {
   const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
-  // Check wake duration before the remaining file loads so the user does not
-  // have to hold the power button across all of the SD reads below.
-  const auto wakeupReason = gpio.getWakeupReason();
-  LOG_INF("BOOT", "Wake route: %s", wakeupRouteName(wakeupReason));
-  switch (wakeupReason) {
-    case HalGPIO::WakeupReason::PowerButton:
-      LOG_INF("BOOT", "Power-button wake: verifying duration required=%u shortAllowed=%d",
-              SETTINGS.getPowerButtonWakeDuration(), SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
-      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonWakeDuration(),
-                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
-        powerManager.startDeepSleep(gpio);
-      }
-      break;
-    case HalGPIO::WakeupReason::AfterUSBPower:
-      // TEMP: continue booting while diagnosing post-flash/reset behavior.
-      // Normal behavior is to go back to sleep when USB power causes a cold boot.
-      LOG_INF("BOOT", "AfterUSBPower route: TEMP continuing boot instead of deep sleep");
-      break;
-    case HalGPIO::WakeupReason::AfterFlash:
-      // After flashing, just proceed to boot
-      LOG_INF("BOOT", "AfterFlash route: continuing boot");
-      break;
-    case HalGPIO::WakeupReason::Other:
-    default:
-      LOG_INF("BOOT", "Other wake route: continuing boot");
-      break;
-  }
+  // Re-sync the wake-hold NVS mirror with the freshly-loaded settings, covering
+  // a setting change followed by power loss without a clean sleep. (The wake
+  // verification itself already ran, pre-SD, further up.)
+  mirrorWakeShortPressToNvs();
 
   // Recovery firmware mode: hold a side button together with Power to open the
   // SD-card firmware update screen. X4 Pro uses BTN_DOWN because BTN_UP is GPIO0,

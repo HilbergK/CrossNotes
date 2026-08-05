@@ -365,6 +365,11 @@ void BookStatsActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     mappedInput.suppressNextConfirmRelease();
+    if (page == Page::PerBook && hasEditableBook()) {
+      page = Page::EditDates;
+      requestUpdate();
+      return;
+    }
     exitStatsActivity();
     return;
   }

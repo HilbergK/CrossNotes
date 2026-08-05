@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -27,13 +28,14 @@ class DictionaryDefinitionActivity final : public Activity {
   //   Back (long press, >= LONG_PRESS_MS) = Done — exit to reader (isCancelled=false).
   // showLookupButton=false:
   //   Back/Confirm both return to caller (isCancelled=true). Unchanged from old behaviour.
-  explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        const std::string& headword, const DictLocation& location,
-                                        bool showLookupButton = false, std::string bookCachePath = "",
-                                        bool recordHistory = false, std::string historyWord = "",
-                                        LookupHistory::Status historyStatus = LookupHistory::Status::NotFound,
-                                        void* backgroundContext = nullptr,
-                                        BackgroundRenderFn backgroundRender = nullptr)
+  explicit DictionaryDefinitionActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& headword, const DictLocation& location,
+      bool showLookupButton = false, std::string bookCachePath = "", bool recordHistory = false,
+      std::string historyWord = "", LookupHistory::Status historyStatus = LookupHistory::Status::NotFound,
+      void* backgroundContext = nullptr, BackgroundRenderFn backgroundRender = nullptr,
+      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0,
+      bool modalBackgroundAlreadyPrepared = false,
+      WordSelectNavigator::HighlightSnapshotStorage* sharedHighlightSnapshotStorage = nullptr)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(headword),
         foundLocation(location),
@@ -44,7 +46,14 @@ class DictionaryDefinitionActivity final : public Activity {
         historyStatus(historyStatus),
         backgroundContext_(backgroundContext),
         backgroundRender_(backgroundRender),
-        controller(renderer, mappedInput, *this, cachePath) {}
+        dictionaryFontFamilyName_(dictionaryFontFamilyName),
+        dictionaryFontPointSize_(dictionaryFontPointSize),
+        skipInitialModalBackgroundRedraw_(modalBackgroundAlreadyPrepared),
+        hasSharedHighlightSnapshotStorage_(sharedHighlightSnapshotStorage != nullptr),
+        controller(renderer, mappedInput, *this, cachePath) {
+    navigator.setHighlightSnapshotStorage(sharedHighlightSnapshotStorage);
+    controller.setLookupToastEnabled(!backgroundRender);
+  }
 
   void onEnter() override;
   void onExit() override;
@@ -72,6 +81,12 @@ class DictionaryDefinitionActivity final : public Activity {
   // framebuffer while dictionary parsing is active.
   void* backgroundContext_ = nullptr;
   BackgroundRenderFn backgroundRender_ = nullptr;
+  // Non-owning pointer to EpubReaderActivity's fixed per-book settings.
+  const char* dictionaryFontFamilyName_ = nullptr;
+  // Zero keeps the dictionary at the reader's active physical point size.
+  uint8_t dictionaryFontPointSize_ = 0;
+  bool skipInitialModalBackgroundRedraw_ = false;
+  bool hasSharedHighlightSnapshotStorage_ = false;
   // The framebuffer retains the book pixels outside the opaque modal. Normal
   // page turns keep this false and redraw only the modal; screens and overlays
   // that replace unrelated pixels set it true to rebuild the book.
@@ -80,6 +95,14 @@ class DictionaryDefinitionActivity final : public Activity {
   int modalY_ = 0;
   int modalWidth_ = 0;
   int modalHeight_ = 0;
+  // Chained definitions may grow this frame but never shrink it. Keeping old
+  // modal pixels covered avoids a reader-background redraw and the associated
+  // reader/dictionary SD-font swap for ordinary lookup chaining.
+  int modalSessionHeight_ = 0;
+  // Erasing a prior black modal border with FAST_REFRESH can leave that border
+  // visible on e-ink. Consume this on the next complete modal paint; it costs
+  // one byte of activity state and does not allocate another framebuffer.
+  bool modalCleanRefreshNeeded_ = false;
   std::string dictionaryName_;
 
   // Resident page representation (Stage 2b-pool). Segments reference text by
@@ -116,7 +139,8 @@ class DictionaryDefinitionActivity final : public Activity {
   // Kept per lookup so a failed SD-font prewarm can use the matching built-in
   // reader font without changing the user's selected font setting.
   int definitionFontId_ = 0;
-  bool usingBuiltInDefinitionFontFallback_ = false;
+  enum class DefinitionFontSource { Dictionary, Reader, BuiltIn };
+  DefinitionFontSource definitionFontSource_ = DefinitionFontSource::Reader;
 
   // SD-font layout needs advance widths before the .dict stream is opened for
   // wrapping. This fixed 1 KB buffer lives inside the heap-owned activity (not
@@ -152,6 +176,9 @@ class DictionaryDefinitionActivity final : public Activity {
   // Word-select mode (activated by pressing Look Up Word in view mode)
   bool isWordSelectMode = false;
   WordSelectNavigator navigator;
+  // History-launched definitions have no parent snapshot to borrow. Allocate
+  // the same bounded storage only if the user enters definition word-select.
+  std::unique_ptr<WordSelectNavigator::HighlightSnapshotStorage> ownedHighlightSnapshotStorage_;
   DictionaryLookupController controller;
 #if CROSSINK_APP_CAP_TOUCH
   bool touchDragLookup_ = false;
@@ -198,5 +225,8 @@ class DictionaryDefinitionActivity final : public Activity {
   bool handleLongPressExitAll(bool enabled);
   int getDefinitionFontId(bool isIpa = false) const;
   void useBuiltInDefinitionFontFallback();
+  void reflowForDefinitionFontChange();
+  void redrawModalBackground();
+  void displayModalBuffer();
   int getLineHeight() const;
 };

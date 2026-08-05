@@ -15,6 +15,7 @@
 #include "BookReadingStats.h"
 #include "EndOfBookOptions.h"
 #include "GlobalReadingStats.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -31,6 +32,7 @@ class XtcReaderActivity final : public Activity {
   bool longPowerPageTurnHandled = false;
   bool frontButtonLongPressHandled = false;
   bool longPressBackHandled = false;
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
 
@@ -44,7 +46,9 @@ class XtcReaderActivity final : public Activity {
   void renderPage();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
-  void saveProgress() const;
+  bool saveProgress(uint32_t page);
+  bool queueProgressSave();
+  bool flushQueuedProgress();
   void loadProgress();
   void pauseReadingStatsTimer(const char* source = "unknown");
   void resumeReadingStatsTimer(const char* source = "unknown");

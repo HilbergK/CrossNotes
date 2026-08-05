@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "activities/Activity.h"
 
 class TxtReaderActivity final : public Activity {
@@ -17,6 +18,7 @@ class TxtReaderActivity final : public Activity {
   bool frontButtonLongPressHandled = false;
   bool longPowerButtonHandled = false;
   bool longPressBackHandled = false;
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
 
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page
@@ -42,7 +44,9 @@ class TxtReaderActivity final : public Activity {
   void buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
-  void saveProgress() const;
+  bool saveProgress(int page);
+  bool queueProgressSave();
+  bool flushQueuedProgress();
   void loadProgress();
   void toggleDarkMode();
   bool consumeLongPowerButtonRelease();

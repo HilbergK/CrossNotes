@@ -32,6 +32,7 @@ class Section {
     uint32_t fileOffset;
     uint16_t paragraphIndex;
     uint16_t listItemIndex;
+    uint32_t visibleTextOffset;
   };
 
   struct BuildContext {
@@ -163,4 +164,9 @@ class Section {
 
   // Look up the running list-item index for the given rendered page.
   std::optional<uint16_t> getListItemIndexForPage(uint16_t page) const;
+
+  // Content coordinate recorded at the start of each rendered page. Available
+  // for finalized sections and the readable prefix of incremental sections.
+  std::optional<uint32_t> getVisibleTextOffsetForPage(uint16_t page) const;
+  std::optional<uint16_t> getPageForVisibleTextOffset(uint32_t offset, bool preferFirstAtOffset = false) const;
 };

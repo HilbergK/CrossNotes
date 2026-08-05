@@ -38,6 +38,7 @@ constexpr int kSelectionPadding = 4;
 constexpr int kSelectionOutlineGap = 2;
 constexpr int kSelectionOuterInset = kSelectionPadding + kSelectionOutlineGap;
 constexpr unsigned long kLongPressMs = 1000;
+constexpr unsigned long kActionFeedbackMs = 1000;
 constexpr float kCircleRadians = 6.2831853f;
 constexpr float kCircleRadiansPerPercent = kCircleRadians / 100.0f;
 
@@ -354,6 +355,12 @@ int RecentBooksGridActivity::bookIndexFromPoint(const int x, const int y) {
 }
 
 void RecentBooksGridActivity::loop() {
+  if (pendingCacheDeletedFeedback && millis() - cacheDeletedFeedbackShowTime >= kActionFeedbackMs) {
+    pendingCacheDeletedFeedback = false;
+    requestUpdate();
+    return;
+  }
+
   if (TouchHeaderBackButton::wasTapped(mappedInput, TouchHeaderBackButton::compactHeaderRect(renderer))) {
     onGoHome();
     return;
@@ -518,6 +525,7 @@ void RecentBooksGridActivity::showBookActionMenu(const int bookIndex, const bool
       std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, book.title, std::move(items),
                                                   ignoreInitialConfirmRelease),
       [this, book](const ActivityResult& result) {
+        longPressFired = false;
         if (result.isCancelled) {
           return;
         }
@@ -541,8 +549,8 @@ void RecentBooksGridActivity::showBookActionMenu(const int bookIndex, const bool
                     if (!BookActions::clearBookCache(book.path)) {
                       LOG_ERR("RBGA", "Failed to clear book cache for: %s", book.path.c_str());
                     } else {
-                      BookActions::drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
-                      delay(1000);
+                      pendingCacheDeletedFeedback = true;
+                      cacheDeletedFeedbackShowTime = millis();
                     }
                   }
                   reloadAfterBookAction();
@@ -761,6 +769,10 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   // the grid but are not rendered in this compact hint bar.
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (pendingCacheDeletedFeedback) {
+    GUI.drawPopup(renderer, tr(STR_BOOK_CACHE_DELETED));
+  }
 
   renderer.displayBuffer();
 

@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <atomic>
+#include <cstring>
 #include <vector>
 
 #include "../Activity.h"
@@ -18,6 +19,7 @@ class ReaderOptionsActivity final : public Activity {
   using SaveSettingsCallback = void (*)(void* ctx);
   using SaveGlobalSettingsCallback = void (*)(void* ctx);
   using GlobalSettingsEditCallback = void (*)(void* ctx);
+  using DictionaryFontChangedCallback = void (*)(void* ctx, const char* familyName, uint8_t pointSize);
 
  private:
   ButtonNavigator buttonNavigator;
@@ -37,6 +39,11 @@ class ReaderOptionsActivity final : public Activity {
   void* beginGlobalSettingsEditContext = nullptr;
   GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
+  char dictionaryFontFamilyName[64] = "";
+  uint8_t dictionaryFontPointSize = 0;
+  bool hasDictionaryFontOverride = false;
+  DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
+  void* dictionaryFontChangedContext = nullptr;
   bool settingsDirty = false;
   bool stablePageNumbersAvailable = false;
 
@@ -56,6 +63,8 @@ class ReaderOptionsActivity final : public Activity {
   void moveSelection(bool forward);
   bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
   void openEnumOptionPicker(const SettingInfo& setting);
+  void openDictionaryFontPicker(const SettingInfo& setting);
+  void openDictionaryFontSizePicker(const SettingInfo& setting);
   void openScreenMarginPicker(const SettingInfo& setting);
   void toggleCurrentSetting();
   void openLineHeightPicker();
@@ -68,15 +77,16 @@ class ReaderOptionsActivity final : public Activity {
   void buildOptionsScreen(UiApp::ScreenType& screen);
 
  public:
-  explicit ReaderOptionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 SaveSettingsCallback saveSettingsCallback = nullptr,
-                                 void* saveSettingsContext = nullptr,
-                                 SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr,
-                                 void* saveGlobalSettingsContext = nullptr,
-                                 GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
-                                 void* beginGlobalSettingsEditContext = nullptr,
-                                 GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
-                                 void* endGlobalSettingsEditContext = nullptr, bool stablePageNumbersAvailable = false)
+  explicit ReaderOptionsActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, SaveSettingsCallback saveSettingsCallback = nullptr,
+      void* saveSettingsContext = nullptr, SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr,
+      void* saveGlobalSettingsContext = nullptr, GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
+      void* beginGlobalSettingsEditContext = nullptr,
+      GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr, void* endGlobalSettingsEditContext = nullptr,
+      bool stablePageNumbersAvailable = false, const char* dictionaryFontFamilyName = nullptr,
+      uint8_t dictionaryFontPointSize = 0, bool hasDictionaryFontOverride = false,
+      DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      void* dictionaryFontChangedContext = nullptr)
       : Activity("ReaderOptions", renderer, mappedInput),
         saveSettingsCallback(saveSettingsCallback),
         saveSettingsContext(saveSettingsContext),
@@ -86,9 +96,18 @@ class ReaderOptionsActivity final : public Activity {
         beginGlobalSettingsEditContext(beginGlobalSettingsEditContext),
         endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
         endGlobalSettingsEditContext(endGlobalSettingsEditContext),
+        dictionaryFontChangedCallback(dictionaryFontChangedCallback),
+        dictionaryFontChangedContext(dictionaryFontChangedContext),
+        dictionaryFontPointSize(dictionaryFontPointSize),
+        hasDictionaryFontOverride(hasDictionaryFontOverride),
         stablePageNumbersAvailable(stablePageNumbersAvailable),
         uiTarget(makeUiTarget(renderer)),
-        app(uiTarget, uiTarget.deviceContext()) {}
+        app(uiTarget, uiTarget.deviceContext()) {
+    if (dictionaryFontFamilyName) {
+      std::strncpy(this->dictionaryFontFamilyName, dictionaryFontFamilyName,
+                   sizeof(this->dictionaryFontFamilyName) - 1);
+    }
+  }
   void onEnter() override;
   void onExit() override;
   void loop() override;

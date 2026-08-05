@@ -132,6 +132,10 @@ void TxtReaderActivity::onExit() {
   // Deactivate reader-specific front button mapping.
   mappedInput.setReaderMode(false);
 
+  if (!flushQueuedProgress()) {
+    LOG_ERR("TRS", "Failed to flush debounced reader progress on exit");
+  }
+
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -155,7 +159,7 @@ void TxtReaderActivity::openReaderMenu() {
     const auto* action = std::get_if<FileBrowserActionResult>(&result.data);
     if (!result.isCancelled && action &&
         static_cast<FileBrowserAction>(action->action) == FileBrowserAction::SendNearby) {
-      saveProgress();
+      saveProgress(currentPage);
       activityManager.goToNearbyBookSend(txt ? txt->getPath() : std::string{}, true);
     } else {
       requestUpdate();
@@ -554,8 +558,9 @@ void TxtReaderActivity::render(RenderLock&&) {
   renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   renderPage();
 
-  // Save progress
-  saveProgress();
+  if (!queueProgressSave()) {
+    LOG_ERR("TRS", "Failed to save debounced reader progress");
+  }
 }
 
 void TxtReaderActivity::renderPage() {
@@ -632,22 +637,44 @@ void TxtReaderActivity::renderStatusBar() const {
                     ReaderUtils::readerDarkModeEnabled());
 }
 
-void TxtReaderActivity::saveProgress() const {
-  HalFile f;
-  if (Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
-    // 6-byte format: page(2 bytes LE) + file offset(4 bytes LE)
-    // The offset lets drawCurrentPageToBuffer render without requiring index.bin.
-    const size_t offset = (currentPage < static_cast<int>(pageOffsets.size())) ? pageOffsets[currentPage] : 0;
-    uint8_t data[6];
-    data[0] = currentPage & 0xFF;
-    data[1] = (currentPage >> 8) & 0xFF;
-    data[2] = offset & 0xFF;
-    data[3] = (offset >> 8) & 0xFF;
-    data[4] = (offset >> 16) & 0xFF;
-    data[5] = (offset >> 24) & 0xFF;
-    f.write(data, 6);
-    f.close();
+bool TxtReaderActivity::saveProgress(const int page) {
+  if (!txt) {
+    return false;
   }
+  HalFile f;
+  if (!Storage.openFileForWrite("TRS", txt->getCachePath() + "/progress.bin", f)) {
+    return false;
+  }
+  // 6-byte format: page(2 bytes LE) + file offset(4 bytes LE)
+  // The offset lets drawCurrentPageToBuffer render without requiring index.bin.
+  const size_t offset = (page >= 0 && page < static_cast<int>(pageOffsets.size())) ? pageOffsets[page] : 0;
+  uint8_t data[6];
+  data[0] = page & 0xFF;
+  data[1] = (page >> 8) & 0xFF;
+  data[2] = offset & 0xFF;
+  data[3] = (offset >> 8) & 0xFF;
+  data[4] = (offset >> 16) & 0xFF;
+  data[5] = (offset >> 24) & 0xFF;
+  const bool written = f.write(data, sizeof(data)) == sizeof(data);
+  f.close();
+  if (!written) {
+    LOG_ERR("TRS", "Short write saving reader progress");
+    return false;
+  }
+  progressSaveDebouncer.markPersisted(static_cast<uint32_t>(page));
+  return true;
+}
+
+bool TxtReaderActivity::queueProgressSave() {
+  if (!progressSaveDebouncer.observe(static_cast<uint32_t>(currentPage))) {
+    return true;
+  }
+  return saveProgress(currentPage);
+}
+
+bool TxtReaderActivity::flushQueuedProgress() {
+  return !progressSaveDebouncer.hasPending() ||
+         saveProgress(static_cast<int>(progressSaveDebouncer.lastObservedPosition()));
 }
 
 void TxtReaderActivity::loadProgress() {

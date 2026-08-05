@@ -344,7 +344,8 @@ class ParagraphStreamer final : public Print {
 
   bool isNonVisibleTag() const {
     return strcasecmp(tagName, "head") == 0 || strcasecmp(tagName, "style") == 0 ||
-           strcasecmp(tagName, "script") == 0 || strcasecmp(tagName, "title") == 0;
+           strcasecmp(tagName, "script") == 0 || strcasecmp(tagName, "title") == 0 || strcasecmp(tagName, "rp") == 0 ||
+           strcasecmp(tagName, "rt") == 0;
   }
 
   static bool isAttrWhitespace(uint8_t c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -801,7 +802,10 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
-  if (pos.hasLiIndex && pos.liIndex > 0) {
+  if (pos.hasVisibleTextOffset) {
+    result.xpath = ChapterXPathResolver::findXPathForVisibleTextOffset(epub, pos.spineIndex, pos.visibleTextOffset);
+  }
+  if (result.xpath.empty() && pos.hasLiIndex && pos.liIndex > 0) {
     result.xpath = ChapterXPathResolver::findXPathForListItem(epub, pos.spineIndex, pos.liIndex);
   }
   if (result.xpath.empty() && pos.hasParagraphIndex && pos.paragraphIndex > 0) {
@@ -943,6 +947,10 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
       resolvedIntra = true;
+      if (s.getTargetVisChars() > 0 && s.getTargetVisChars() <= UINT32_MAX) {
+        result.visibleTextOffset = static_cast<uint32_t>(s.getTargetVisChars() - 1);
+        result.hasVisibleTextOffset = true;
+      }
       const int pAtMatch = s.getParagraphAtMatch();
       if (pAtMatch > 0) {
         result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
@@ -969,6 +977,10 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
       resolvedIntra = true;
+      if (s.getTargetVisChars() > 0 && s.getTargetVisChars() <= UINT32_MAX) {
+        result.visibleTextOffset = static_cast<uint32_t>(s.getTargetVisChars() - 1);
+        result.hasVisibleTextOffset = true;
+      }
       LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%% (target=%zu total=%zu)", xpathP, xpathTextNode, xpathChar,
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }

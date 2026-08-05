@@ -227,6 +227,7 @@ class GfxRenderer {
   int getWriteRows() const { return _stripActive ? _stripRows : panelHeight; }
 
   // Drawing
+  bool isPixelBlack(int x, int y) const;
   void drawPixel(int x, int y, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
@@ -277,7 +278,10 @@ class GfxRenderer {
   int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   /// Returns the kerning adjustment between two adjacent codepoints.
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
-  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
+  /// Returns the rendered advance of \p text. When \p followingCp is supplied,
+  /// includes its kerning with the final glyph in the same fixed-point rounding
+  /// step that drawText() uses, without drawing or consuming that codepoint.
+  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, uint32_t followingCp = 0) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,

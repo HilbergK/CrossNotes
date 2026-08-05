@@ -42,8 +42,10 @@ class SdCardFont {
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
   // Default 0x0F = all present styles.
   // When metadataOnly=true, only glyph metrics are loaded (no bitmap data).
+  // When includeKerning=false, ligatures remain active but persistent kern
+  // classes and per-page mini matrices are skipped (dictionary-modal policy).
   // Returns number of glyphs that couldn't be loaded (0 on full success).
-  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false);
+  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false, bool includeKerning = true);
 
   // Build a compact advance-only table for layout measurement.
   // Extracts ALL unique codepoints from words (no MAX_PAGE_GLYPHS cap),
@@ -173,7 +175,8 @@ class SdCardFont {
     EpdKernClassEntry* kernLeftClasses = nullptr;
     EpdKernClassEntry* kernRightClasses = nullptr;
     EpdLigaturePair* ligaturePairs = nullptr;
-    bool kernLigLoaded = false;
+    bool kernClassesLoaded = false;
+    bool ligaturesLoaded = false;
 
     // Stub EpdFontData returned when not prewarmed
     EpdFontData stubData{};
@@ -275,7 +278,12 @@ class SdCardFont {
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 256;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
+  uint32_t advanceTableCapacity_[MAX_STYLES] = {};
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
+  // Grow geometrically so normal layout batches reuse the persistent table
+  // instead of repeatedly replacing it. New storage is allocated before the
+  // old table is released, preserving the working cache on OOM.
+  bool ensureAdvanceTableCapacity(uint8_t styleIdx, uint32_t needed);
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
   void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
@@ -291,9 +299,9 @@ class SdCardFont {
   void freeStyleAll(PerStyle& s);
   void freeStyleKernLigatureData(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
-  bool loadStyleKernLigatureData(PerStyle& s);
+  bool loadStyleKernLigatureData(PerStyle& s, bool includeKerning);
   bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
-  void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
+  void applyKernLigaturePointers(PerStyle& s, EpdFontData& data, bool includeKerning) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
   int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
@@ -301,7 +309,8 @@ class SdCardFont {
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
-  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly,
+                   bool includeKerning);
 
   // Global helpers
   void freeAll();

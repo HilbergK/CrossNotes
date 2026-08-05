@@ -22,18 +22,16 @@
 inline std::string fontSizePointLabel(const uint8_t pointSize) { return std::to_string(pointSize) + " pt"; }
 
 inline void appendBuiltinFontSizeOption(SettingInfo& setting, const CrossPointSettings::FONT_SIZE size) {
-  const uint8_t stored = CrossPointSettings::getStoredReaderFontSize(size);
-  if (stored == UINT8_MAX) return;
-
-  setting.enumStringValues.push_back(fontSizePointLabel(CrossPointSettings::getReaderFontPointSize(size)));
-  setting.enumRawValues.push_back(stored);
+  const uint8_t pointSize = CrossPointSettings::getReaderFontPointSize(size);
+  setting.enumStringValues.push_back(fontSizePointLabel(pointSize));
+  setting.enumRawValues.push_back(pointSize);
 }
 
 inline SettingInfo buildBuiltinFontSizeSetting() {
   SettingInfo s;
   s.nameId = StrId::STR_FONT_SIZE;
   s.type = SettingType::ENUM;
-  s.valuePtr = &CrossPointSettings::fontSize;
+  s.valuePtr = &CrossPointSettings::readerFontPointSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
   s.enumStringValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
@@ -51,7 +49,7 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   SettingInfo s;
   s.nameId = StrId::STR_FONT_SIZE;
   s.type = SettingType::ENUM;
-  s.valuePtr = &CrossPointSettings::fontSize;
+  s.valuePtr = &CrossPointSettings::readerFontPointSize;
   s.key = "fontSize";
   s.category = StrId::STR_CAT_READER;
 
@@ -60,7 +58,7 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   s.enumRawValues.reserve(sizes.size());
   for (size_t i = 0; i < sizes.size(); i++) {
     s.enumStringValues.push_back(fontSizePointLabel(sizes[i]));
-    s.enumRawValues.push_back(static_cast<uint8_t>(i));
+    s.enumRawValues.push_back(sizes[i]);
   }
   return s;
 }
@@ -205,30 +203,86 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   };
 
   s.valueSetter = [sdFamilyNames, sdFamilySizes](uint8_t v) {
-    uint8_t targetPointSize = CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
-    if (SETTINGS.sdFontFamilyName[0] != '\0') {
-      for (size_t i = 0; i < sdFamilyNames.size(); i++) {
-        if (sdFamilyNames[i] == SETTINGS.sdFontFamilyName && SETTINGS.fontSize < sdFamilySizes[i].size()) {
-          targetPointSize = sdFamilySizes[i][SETTINGS.fontSize];
-          break;
-        }
-      }
-    }
+    const uint8_t targetPointSize = SETTINGS.readerFontPointSize;
 
     if (v < CrossPointSettings::BUILTIN_FONT_COUNT) {
       SETTINGS.fontFamily = v;
       SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.fontSize = closestBuiltinFontSizeIndex(targetPointSize);
+      SETTINGS.readerFontPointSize = CrossPointSettings::getReaderFontPointSize(
+          static_cast<CrossPointSettings::FONT_SIZE>(closestBuiltinFontSizeIndex(targetPointSize)));
     } else {
       int sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
       if (sdIdx < static_cast<int>(sdFamilyNames.size())) {
-        SETTINGS.fontSize = closestPointSizeIndex(sdFamilySizes[sdIdx], targetPointSize);
+        SETTINGS.readerFontPointSize =
+            sdFamilySizes[sdIdx][closestPointSizeIndex(sdFamilySizes[sdIdx], targetPointSize)];
         strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
         SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
       }
     }
   };
 
+  return s;
+}
+
+inline SettingInfo buildDictionaryFontFamilySetting(const SdCardFontRegistry* registry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY_FONT;
+  s.type = SettingType::ENUM;
+  s.key = "dictionaryFont";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.push_back(I18N.get(StrId::STR_USE_READER_FONT));
+
+  std::vector<std::string> familyNames;
+  if (registry) {
+    const auto& families = registry->getFamilies();
+    familyNames.reserve(families.size());
+    s.enumStringValues.reserve(families.size() + 1);
+    for (const auto& family : families) {
+      familyNames.push_back(family.name);
+      s.enumStringValues.push_back(family.name);
+    }
+  }
+
+  s.valueGetter = [familyNames]() -> uint8_t {
+    for (size_t i = 0; i < familyNames.size(); ++i) {
+      if (familyNames[i] == SETTINGS.dictionarySdFontFamilyName) return static_cast<uint8_t>(i + 1);
+    }
+    return 0;
+  };
+  s.valueSetter = [familyNames](const uint8_t value) {
+    if (value == 0 || value > familyNames.size()) {
+      SETTINGS.dictionarySdFontFamilyName[0] = '\0';
+      SETTINGS.dictionaryFontPointSize = 0;
+      return;
+    }
+    strncpy(SETTINGS.dictionarySdFontFamilyName, familyNames[value - 1].c_str(),
+            sizeof(SETTINGS.dictionarySdFontFamilyName) - 1);
+    SETTINGS.dictionarySdFontFamilyName[sizeof(SETTINGS.dictionarySdFontFamilyName) - 1] = '\0';
+  };
+  return s;
+}
+
+inline SettingInfo buildDictionaryFontSizeSetting(const SdCardFontRegistry* registry) {
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY_FONT_SIZE;
+  s.type = SettingType::ENUM;
+  s.valuePtr = &CrossPointSettings::dictionaryFontPointSize;
+  s.key = "dictionaryFontSize";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.push_back(I18N.get(StrId::STR_USE_READER_FONT_SIZE));
+  s.enumRawValues.push_back(0);
+
+  if (!registry || SETTINGS.dictionarySdFontFamilyName[0] == '\0') return s;
+  const auto* family = registry->findFamily(SETTINGS.dictionarySdFontFamilyName);
+  if (!family) return s;
+
+  const auto sizes = family->availableSizes();
+  s.enumStringValues.reserve(sizes.size() + 1);
+  s.enumRawValues.reserve(sizes.size() + 1);
+  for (const uint8_t pointSize : sizes) {
+    s.enumStringValues.push_back(fontSizePointLabel(pointSize));
+    s.enumRawValues.push_back(pointSize);
+  }
   return s;
 }
 
@@ -847,6 +901,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
   }
   if (dictRegistry) {
+    if (dictRegistry->count() > 0) {
+      auto fontSizeIt =
+          std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_SIZE; });
+      const size_t insertIndex =
+          fontSizeIt == v.end() ? v.size() : static_cast<size_t>(std::distance(v.begin(), fontSizeIt) + 1);
+      v.insert(v.begin() + insertIndex, buildDictionaryFontFamilySetting(registry));
+      v.insert(v.begin() + insertIndex + 1, buildDictionaryFontSizeSetting(registry));
+    }
     auto guideIt =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_GUIDE_READING; });
     const auto insertPos = guideIt == v.end() ? v.end() : guideIt + 1;
@@ -870,6 +932,8 @@ inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector
   readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_FONT_OPTIONS));
   addReaderSetting(StrId::STR_FONT_FAMILY);
   addReaderSetting(StrId::STR_FONT_SIZE);
+  addReaderSetting(StrId::STR_DICTIONARY_FONT);
+  addReaderSetting(StrId::STR_DICTIONARY_FONT_SIZE);
   readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   addReaderSetting(StrId::STR_SD_FONT_SIZE_RANGE);
 
@@ -938,14 +1002,16 @@ inline std::vector<SettingInfo> buildBookReaderSettingsParentList(const std::vec
 
 inline std::vector<SettingInfo> buildReaderFontSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(7);
+  settings.reserve(9);
   addSettingByName(settings, allSettings, StrId::STR_FONT_FAMILY);
   addSettingByName(settings, allSettings, StrId::STR_FONT_SIZE);
+  addSettingByName(settings, allSettings, StrId::STR_DICTIONARY_FONT);
+  addSettingByName(settings, allSettings, StrId::STR_DICTIONARY_FONT_SIZE);
   addSettingByName(settings, allSettings, StrId::STR_LINE_SPACING);
   addSettingByName(settings, allSettings, StrId::STR_WORD_SPACING);
+  addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
   settings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   addSettingByName(settings, allSettings, StrId::STR_SD_FONT_SIZE_RANGE);
-  addSettingByName(settings, allSettings, StrId::STR_TEXT_AA);
   return settings;
 }
 

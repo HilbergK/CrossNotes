@@ -173,7 +173,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         // Render empty cover
         renderer.fillRect(tileX + (tileWidth - coverWidth) / 2, imgY + (RoundedRaffMetrics::values.homeCoverHeight / 3),
                           coverWidth, 2 * RoundedRaffMetrics::values.homeCoverHeight / 3, true);
-        drawLucideIcon(renderer, icon_image_32, tileX + (tileWidth - coverWidth) / 2 + 24, imgY + 24);
+        drawLucideIcon(renderer, icon_book_open_32, tileX + (tileWidth - coverWidth) / 2 + 24, imgY + 24);
         renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                Color::LightGray);

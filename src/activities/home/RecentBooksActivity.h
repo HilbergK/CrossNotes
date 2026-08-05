@@ -25,6 +25,8 @@ class RecentBooksActivity final : public Activity {
   // Set when a long-press has fired; input is swallowed until Confirm is released
   // again so the release doesn't also open the book.
   bool longPressFired = false;
+  bool pendingCacheDeletedFeedback = false;
+  unsigned long cacheDeletedFeedbackShowTime = 0UL;
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;

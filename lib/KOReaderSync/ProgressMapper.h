@@ -19,7 +19,9 @@ struct CrossPointPosition {
   uint16_t liIndex = 0;            // Running <li> count at the matched XPath element
   bool hasLiIndex = false;         // True when target element is <li> and liIndex was resolved
   char xpathAnchorId[64] = {};     // First <a id> captured inside the matched XPath element
-  bool valid = true;               // False when an exact requested coordinate mapping is unavailable
+  uint32_t visibleTextOffset = 0;  // Zero-based visible codepoint offset in the spine item
+  bool hasVisibleTextOffset = false;
+  bool valid = true;  // False when an exact requested coordinate mapping is unavailable
 };
 
 /**

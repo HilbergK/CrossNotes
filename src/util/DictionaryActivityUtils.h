@@ -20,7 +20,12 @@ inline void cancelAndFinish(Activity& act) {
 inline void drawWordSelectButtonHints(GfxRenderer& renderer, const MappedInputManager& mappedInput,
                                       const WordSelectNavigator& navigator) {
   const char* confirmLabel = navigator.isMultiSelecting() ? tr(STR_DONE) : tr(STR_LOOKUP_SHORT);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const char* previousLabel = isLandscape ? tr(STR_DIR_UP) : tr(STR_DIR_LEFT);
+  const char* nextLabel = isLandscape ? tr(STR_DIR_DOWN) : tr(STR_DIR_RIGHT);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, previousLabel, nextLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

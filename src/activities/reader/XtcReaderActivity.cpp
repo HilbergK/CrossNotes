@@ -53,6 +53,54 @@ void drawToast(const GfxRenderer& renderer, const char* msg) {
   renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, !toastBackgroundBlack);
   renderer.displayBuffer();
 }
+
+enum class XtchRenderPass { Base, Lsb, Msb };
+
+bool streamXtchRenderPass(const Xtc& xtc, const uint32_t pageIndex, const uint16_t pageWidth, const uint16_t pageHeight,
+                          GfxRenderer& renderer, const XtchRenderPass pass) {
+  const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
+  const size_t colBytes = (pageHeight + 7) / 8;
+  const xtc::XtcError error =
+      xtc.loadPageStreaming(pageIndex, [&](const uint8_t* data, const size_t size, const size_t offset) {
+        for (size_t i = 0; i < size; i++) {
+          const size_t absoluteOffset = offset + i;
+          const bool secondPlane = absoluteOffset >= planeSize;
+          const size_t planeOffset = secondPlane ? absoluteOffset - planeSize : absoluteOffset;
+          const size_t colIndex = planeOffset / colBytes;
+          if (colIndex >= pageWidth) continue;
+
+          const uint16_t x = static_cast<uint16_t>(pageWidth - 1 - colIndex);
+          const uint16_t yBase = static_cast<uint16_t>((planeOffset % colBytes) * 8);
+          for (uint8_t bit = 0; bit < 8 && yBase + bit < pageHeight; bit++) {
+            const uint16_t y = static_cast<uint16_t>(yBase + bit);
+            const bool bitSet = ((data[i] >> (7 - bit)) & 1) != 0;
+            switch (pass) {
+              case XtchRenderPass::Base:
+                // Applying both planes onto a white buffer produces bit1 OR bit2.
+                if (bitSet) renderer.drawPixel(x, y, true);
+                break;
+              case XtchRenderPass::Lsb:
+                // Starting black, plane 1 clears candidates and plane 2 removes
+                // false positives, leaving white only for XTH value 1.
+                if (!bitSet) renderer.drawPixel(x, y, secondPlane);
+                break;
+              case XtchRenderPass::Msb:
+                // XTH values 1 and 2 are bit1 XOR bit2. Plane 1 seeds the
+                // framebuffer; set plane-2 bits then toggle those pixels.
+                if (!secondPlane && bitSet) {
+                  renderer.drawPixel(x, y, false);
+                } else if (secondPlane && bitSet) {
+                  renderer.drawPixel(x, y, !renderer.isPixelBlack(x, y));
+                }
+                break;
+            }
+          }
+        }
+      });
+  if (error == xtc::XtcError::OK) return true;
+  LOG_ERR("XTR", "Failed to stream XTCH page %lu: %s", pageIndex, xtc::errorToString(error));
+  return false;
+}
 }  // namespace
 
 void XtcReaderActivity::onEnter() {
@@ -89,6 +137,10 @@ void XtcReaderActivity::onExit() {
   Activity::onExit();
 
   mappedInput.setReaderMode(false);
+
+  if (!flushQueuedProgress()) {
+    LOG_ERR("XTR", "Failed to flush debounced reader progress on exit");
+  }
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -659,7 +711,7 @@ void XtcReaderActivity::onReaderMenuConfirm(const int action) {
       deleteBookCache();
       break;
     case XtcReaderMenuActivity::MenuAction::SEND_NEARBY_BOOK:
-      saveProgress();
+      saveProgress(currentPage);
       activityManager.goToNearbyBookSend(xtc ? xtc->getPath() : std::string{}, true);
       return;
     case XtcReaderMenuActivity::MenuAction::DISABLE_TOUCHSCREEN:
@@ -716,7 +768,9 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   renderPage();
   pageShownAtMs = millis();
-  saveProgress();
+  if (!queueProgressSave()) {
+    LOG_ERR("XTR", "Failed to save debounced reader progress");
+  }
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
@@ -798,15 +852,59 @@ void XtcReaderActivity::renderPage() {
   const uint16_t pageHeight = xtc->getPageHeight();
   const uint8_t bitDepth = xtc->getBitDepth();
 
-  // Calculate buffer size for one page
-  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
-  size_t pageBufferSize;
   if (bitDepth == 2) {
-    pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
-  } else {
-    pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
+    auto showStreamError = [&]() {
+      renderer.clearScreen();
+      const char* message =
+          xtc->getLastError() == xtc::XtcError::MEMORY_ERROR ? tr(STR_MEMORY_ERROR) : tr(STR_PAGE_LOAD_ERROR);
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, message, true, EpdFontFamily::BOLD);
+      renderer.displayBuffer();
+    };
+
+    // XTCH stores two 48 KB planes. Stream each rendering pass through a 1 KB
+    // scratch chunk so fragmented C3 heaps never need one contiguous 96 KB block.
+    renderer.clearScreen();
+    if (!streamXtchRenderPass(*xtc, currentPage, pageWidth, pageHeight, renderer, XtchRenderPass::Base)) {
+      showStreamError();
+      return;
+    }
+
+    if (pagesUntilFullRefresh <= 1) {
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.preconditionGrayscale();
+      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+    } else {
+      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+      pagesUntilFullRefresh--;
+    }
+
+    renderer.clearScreen(0x00);
+    if (!streamXtchRenderPass(*xtc, currentPage, pageWidth, pageHeight, renderer, XtchRenderPass::Lsb)) {
+      showStreamError();
+      return;
+    }
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.clearScreen(0x00);
+    if (!streamXtchRenderPass(*xtc, currentPage, pageWidth, pageHeight, renderer, XtchRenderPass::Msb)) {
+      showStreamError();
+      return;
+    }
+    renderer.copyGrayscaleMsbBuffers();
+    renderer.displayGrayBuffer();
+
+    renderer.clearScreen();
+    if (!streamXtchRenderPass(*xtc, currentPage, pageWidth, pageHeight, renderer, XtchRenderPass::Base)) {
+      showStreamError();
+      return;
+    }
+    renderer.cleanupGrayscaleWithFrameBuffer();
+    return;
   }
+
+  // Calculate buffer size for one page
+  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes.
+  const size_t pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
 
   // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
@@ -837,124 +935,20 @@ void XtcReaderActivity::renderPage() {
   // XTC/XTCH pages are pre-rendered with status bar included, so render full page
   const uint16_t maxSrcY = pageHeight;
 
-  if (bitDepth == 2) {
-    // XTH 2-bit mode: Two bit planes, column-major order
-    // - Columns scanned right to left (x = width-1 down to 0)
-    // - 8 vertical pixels per byte (MSB = topmost pixel in group)
-    // - First plane: Bit1, Second plane: Bit2
-    // - Pixel value = (bit1 << 1) | bit2
-    // - Grayscale: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
+  // 1-bit mode: 8 pixels per byte, MSB first
+  const size_t srcRowBytes = (pageWidth + 7) / 8;  // 60 bytes for 480 width
 
-    const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
-    const uint8_t* plane1 = pageBuffer;              // Bit1 plane
-    const uint8_t* plane2 = pageBuffer + planeSize;  // Bit2 plane
-    const size_t colBytes = (pageHeight + 7) / 8;    // Bytes per column (100 for 800 height)
+  for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
+    const size_t srcRowStart = srcY * srcRowBytes;
 
-    // Lambda to get pixel value at (x, y)
-    auto getPixelValue = [&](uint16_t x, uint16_t y) -> uint8_t {
-      const size_t colIndex = pageWidth - 1 - x;
-      const size_t byteInCol = y / 8;
-      const size_t bitInByte = 7 - (y % 8);
-      const size_t byteOffset = colIndex * colBytes + byteInCol;
-      const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
-      const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
-      return (bit1 << 1) | bit2;
-    };
+    for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
+      // Read source pixel (MSB first, bit 7 = leftmost pixel)
+      const size_t srcByte = srcRowStart + srcX / 8;
+      const size_t srcBit = 7 - (srcX % 8);
+      const bool isBlack = !((pageBuffer[srcByte] >> srcBit) & 1);  // XTC: 0 = black, 1 = white
 
-    // Optimized grayscale rendering without storeBwBuffer (saves 48KB peak memory)
-    // Flow: BW display → LSB/MSB passes → grayscale display → re-render BW for next frame
-
-    // Count pixel distribution for debugging
-    uint32_t pixelCounts[4] = {0, 0, 0, 0};
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        pixelCounts[getPixelValue(x, y)]++;
-      }
-    }
-
-    // Pass 1: BW buffer - draw all non-white pixels as black
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) >= 1) {
-          renderer.drawPixel(x, y, true);
-        }
-      }
-    }
-
-    if (pagesUntilFullRefresh <= 1) {
-      // Periodic ghost cleanup: scrub via the normal path, then run the
-      // settle flavor of the grayscale base pass (DTM planes are equal after
-      // the display sync, so only the gentle reinforcement cells fire).
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-      renderer.preconditionGrayscale();
-      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
-    } else {
-      // OEM grayscale pipeline base: differential "AA-pre-BW(mid)" update as
-      // the page turn on X3; plain FAST refresh on X4 (previous behavior).
-      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-      pagesUntilFullRefresh--;
-    }
-
-    // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) == 1) {  // Dark grey only
-          renderer.drawPixel(x, y, false);
-        }
-      }
-    }
-    renderer.copyGrayscaleLsbBuffers();
-
-    // Pass 3: MSB buffer - mark LIGHT AND DARK gray (XTH value 1 or 2)
-    // In LUT: 0 bit = apply gray effect, 1 bit = untouched
-    renderer.clearScreen(0x00);
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        const uint8_t pv = getPixelValue(x, y);
-        if (pv == 1 || pv == 2) {  // Dark grey or Light grey
-          renderer.drawPixel(x, y, false);
-        }
-      }
-    }
-    renderer.copyGrayscaleMsbBuffers();
-
-    // Display grayscale overlay
-    renderer.displayGrayBuffer();
-
-    // Pass 4: Re-render BW to framebuffer (restore for next frame, instead of restoreBwBuffer)
-    renderer.clearScreen();
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) >= 1) {
-          renderer.drawPixel(x, y, true);
-        }
-      }
-    }
-
-    // Cleanup grayscale buffers with current frame buffer
-    renderer.cleanupGrayscaleWithFrameBuffer();
-
-    free(pageBuffer);
-
-    return;
-  } else {
-    // 1-bit mode: 8 pixels per byte, MSB first
-    const size_t srcRowBytes = (pageWidth + 7) / 8;  // 60 bytes for 480 width
-
-    for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
-      const size_t srcRowStart = srcY * srcRowBytes;
-
-      for (uint16_t srcX = 0; srcX < pageWidth; srcX++) {
-        // Read source pixel (MSB first, bit 7 = leftmost pixel)
-        const size_t srcByte = srcRowStart + srcX / 8;
-        const size_t srcBit = 7 - (srcX % 8);
-        const bool isBlack = !((pageBuffer[srcByte] >> srcBit) & 1);  // XTC: 0 = black, 1 = white
-
-        if (isBlack) {
-          renderer.drawPixel(srcX, srcY, true);
-        }
+      if (isBlack) {
+        renderer.drawPixel(srcX, srcY, true);
       }
     }
   }
@@ -972,17 +966,38 @@ void XtcReaderActivity::renderPage() {
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 }
 
-void XtcReaderActivity::saveProgress() const {
-  HalFile f;
-  if (Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    data[0] = currentPage & 0xFF;
-    data[1] = (currentPage >> 8) & 0xFF;
-    data[2] = (currentPage >> 16) & 0xFF;
-    data[3] = (currentPage >> 24) & 0xFF;
-    f.write(data, 4);
-    f.close();
+bool XtcReaderActivity::saveProgress(const uint32_t page) {
+  if (!xtc) {
+    return false;
   }
+  HalFile f;
+  if (!Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
+    return false;
+  }
+  uint8_t data[4];
+  data[0] = page & 0xFF;
+  data[1] = (page >> 8) & 0xFF;
+  data[2] = (page >> 16) & 0xFF;
+  data[3] = (page >> 24) & 0xFF;
+  const bool written = f.write(data, sizeof(data)) == sizeof(data);
+  f.close();
+  if (!written) {
+    LOG_ERR("XTR", "Short write saving reader progress");
+    return false;
+  }
+  progressSaveDebouncer.markPersisted(page);
+  return true;
+}
+
+bool XtcReaderActivity::queueProgressSave() {
+  if (!progressSaveDebouncer.observe(currentPage)) {
+    return true;
+  }
+  return saveProgress(currentPage);
+}
+
+bool XtcReaderActivity::flushQueuedProgress() {
+  return !progressSaveDebouncer.hasPending() || saveProgress(progressSaveDebouncer.lastObservedPosition());
 }
 
 void XtcReaderActivity::loadProgress() {

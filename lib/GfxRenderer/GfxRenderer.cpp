@@ -911,6 +911,29 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
+bool GfxRenderer::isPixelBlack(const int x, const int y) const {
+  int phyX = 0;
+  int phyY = 0;
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+  if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
+    return false;
+  }
+
+  const uint8_t* target = frameBuffer;
+  uint32_t rowY = static_cast<uint32_t>(phyY);
+  if (_stripActive) {
+    if (phyY < _stripY0 || phyY >= _stripY0 + _stripRows) {
+      return false;
+    }
+    target = _stripBuf;
+    rowY = static_cast<uint32_t>(phyY - _stripY0);
+  }
+
+  const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
+  const uint8_t bitPosition = 7 - (phyX % 8);
+  return (target[byteIndex] & (1 << bitPosition)) == 0;
+}
+
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   int phyX = 0;
   int phyY = 0;
@@ -918,9 +941,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   // Note: this call should be inlined for better performance
   rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
 
-  // Bounds checking against runtime panel dimensions
+  // Text glyphs and shapes may cross a clipping edge. This is a per-pixel hot
+  // path, so logging here can turn one off-screen glyph into thousands of slow
+  // serial writes and starve input/power handling for minutes.
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
-    LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
     return;
   }
 
@@ -2694,7 +2718,8 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
   return fp4::toPixel(kernFP);                                           // snap 4.4 fixed-point to nearest pixel
 }
 
-int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, const EpdFontFamily::Style style,
+                                 const uint32_t followingCp) const {
   // Match the font drawText would use for CJK-bearing strings (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
@@ -2720,6 +2745,8 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       return 0;
     }
     const auto& font = fontIt->second;
+    uint32_t lastCp = 0;
+    bool lastScaledSmallCap = false;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
@@ -2736,6 +2763,20 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       } else {
         widthFP += advFP;
       }
+      lastCp = cp;
+      lastScaledSmallCap = scaledSmallCap;
+    }
+    if (followingCp != 0 && lastCp != 0) {
+      uint32_t adjustedFollowingCp = followingCp;
+      const bool followingScaledSmallCap = isSmallCapsLowercase(style, adjustedFollowingCp);
+      if (followingScaledSmallCap) {
+        adjustedFollowingCp = smallCapsUppercaseCodepoint(adjustedFollowingCp);
+      }
+      int32_t kernFP = font.getKerning(lastCp, adjustedFollowingCp, style);
+      if (lastScaledSmallCap || followingScaledSmallCap) {
+        kernFP = smallCapsAdvanceFP(kernFP);
+      }
+      widthFP += kernFP;
     }
     return fp4::toPixel(widthFP);
   }
@@ -2817,7 +2858,21 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     prevCp = cp;
     prevScaledSmallCap = scaledSmallCap;
   }
-  widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  if (followingCp != 0 && prevCp != 0) {
+    uint32_t adjustedFollowingCp = followingCp;
+    const bool followingScaledSmallCap = isSmallCapsLowercase(style, adjustedFollowingCp);
+    if (followingScaledSmallCap) {
+      adjustedFollowingCp = smallCapsUppercaseCodepoint(adjustedFollowingCp);
+    }
+    adjustedFollowingCp = font.getFallbackCodepoint(adjustedFollowingCp, style);
+    int32_t kernFP = font.getKerning(prevCp, adjustedFollowingCp, style);  // 4.4 fixed-point kern
+    if (prevScaledSmallCap || followingScaledSmallCap) {
+      kernFP = smallCapsAdvanceFP(kernFP);
+    }
+    widthPx += fp4::toPixel(prevAdvanceFP + kernFP);
+  } else {
+    widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+  }
   return widthPx;
 }
 

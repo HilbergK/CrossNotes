@@ -18,6 +18,7 @@
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
+#include "util/DictionaryRegistry.h"
 
 namespace fui = freeink::ui;
 
@@ -118,6 +119,71 @@ void ReaderOptionsActivity::rebuildSettingsList() {
                                              setting.nameId == StrId::STR_MANAGE_FONTS;
                                     }),
                      fontSettings.end());
+
+  // Dictionary-specific font controls are useful only when an installed dictionary can use them.
+  DictionaryRegistry installedDictionaryRegistry;
+  const bool hasInstalledDictionaries = installedDictionaryRegistry.discover();
+  installedDictionaryRegistry.clear();
+  if (!hasInstalledDictionaries) {
+    setCurrentSettings();
+    selectedIndex = 0;
+    return;
+  }
+
+  SettingInfo dictionaryFont;
+  dictionaryFont.nameId = StrId::STR_DICTIONARY_FONT;
+  dictionaryFont.type = SettingType::ENUM;
+  dictionaryFont.key = "dictionaryFont";
+  dictionaryFont.category = StrId::STR_CAT_READER;
+  const auto& families = sdFontSystem.registry().getFamilies();
+  dictionaryFont.enumStringValues.reserve(families.size() + 2);
+  dictionaryFont.enumStringValues.push_back(tr(STR_DICT_USE_GLOBAL));
+  bool selectedFamilyIsInstalled = false;
+  for (const auto& family : families) {
+    dictionaryFont.enumStringValues.push_back(family.name);
+    if (family.name == dictionaryFontFamilyName) {
+      selectedFamilyIsInstalled = true;
+    }
+  }
+  if (dictionaryFontFamilyName[0] != '\0' && !selectedFamilyIsInstalled) {
+    dictionaryFont.enumStringValues.push_back(std::string(dictionaryFontFamilyName) + " (" + tr(STR_UNAVAILABLE) + ")");
+  }
+  const auto fontSize = std::find_if(fontSettings.begin(), fontSettings.end(), [](const SettingInfo& setting) {
+    return setting.nameId == StrId::STR_FONT_SIZE;
+  });
+  const size_t dictionaryFontIndex =
+      fontSize == fontSettings.end() ? 0 : static_cast<size_t>(std::distance(fontSettings.begin(), fontSize) + 1);
+  fontSettings.insert(fontSettings.begin() + dictionaryFontIndex, std::move(dictionaryFont));
+
+  SettingInfo dictionaryFontSize;
+  dictionaryFontSize.nameId = StrId::STR_DICTIONARY_FONT_SIZE;
+  dictionaryFontSize.type = SettingType::ENUM;
+  dictionaryFontSize.key = "dictionaryFontSize";
+  dictionaryFontSize.category = StrId::STR_CAT_READER;
+  dictionaryFontSize.enumStringValues.push_back(tr(STR_DICT_USE_GLOBAL));
+  dictionaryFontSize.enumRawValues.push_back(0);
+  if (dictionaryFontFamilyName[0] != '\0') {
+    if (const auto* family = sdFontSystem.registry().findFamily(dictionaryFontFamilyName)) {
+      dictionaryFontSize.enumStringValues.reserve(family->files.size() + 1);
+      dictionaryFontSize.enumRawValues.reserve(family->files.size() + 1);
+      // Build a sorted, unique list directly from the catalog already resident
+      // for this screen. Dictionary lookup itself never retains a size list.
+      for (const auto& file : family->files) {
+        if (file.style != 0 ||
+            std::find(dictionaryFontSize.enumRawValues.begin(), dictionaryFontSize.enumRawValues.end(),
+                      file.pointSize) != dictionaryFontSize.enumRawValues.end()) {
+          continue;
+        }
+        const auto insertAt = std::lower_bound(dictionaryFontSize.enumRawValues.begin() + 1,
+                                               dictionaryFontSize.enumRawValues.end(), file.pointSize);
+        const size_t index = static_cast<size_t>(std::distance(dictionaryFontSize.enumRawValues.begin(), insertAt));
+        dictionaryFontSize.enumRawValues.insert(insertAt, file.pointSize);
+        dictionaryFontSize.enumStringValues.insert(dictionaryFontSize.enumStringValues.begin() + index,
+                                                   fontSizePointLabel(file.pointSize));
+      }
+    }
+  }
+  fontSettings.insert(fontSettings.begin() + dictionaryFontIndex + 1, std::move(dictionaryFontSize));
 
   setCurrentSettings();
   selectedIndex = 0;
@@ -248,6 +314,89 @@ void ReaderOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
   requestUpdate();
 }
 
+void ReaderOptionsActivity::openDictionaryFontPicker(const SettingInfo& setting) {
+  const size_t optionCount = setting.enumStringValues.size();
+  if (optionCount == 0) return;
+
+  uint8_t currentIndex = 0;
+  if (hasDictionaryFontOverride && dictionaryFontFamilyName[0] != '\0') {
+    for (size_t i = 1; i < optionCount; ++i) {
+      if (setting.enumStringValues[i] == dictionaryFontFamilyName) {
+        currentIndex = static_cast<uint8_t>(i);
+        break;
+      }
+    }
+    if (currentIndex == 0) currentIndex = static_cast<uint8_t>(optionCount - 1);
+  }
+
+  const SettingInfo selectedSetting = setting;
+  optionPopup.show(setting.nameId, selectedSetting.enumStringValues, currentIndex, [this, selectedSetting](int index) {
+    const char* familyName = nullptr;
+    if (index > 0 && index < static_cast<int>(selectedSetting.enumStringValues.size())) {
+      const std::string& candidate = selectedSetting.enumStringValues[static_cast<size_t>(index)];
+      // An unavailable entry is only the retained current value. Keep it rather
+      // than saving its decorated display label.
+      familyName = sdFontSystem.registry().findFamily(candidate.c_str()) ? candidate.c_str() : dictionaryFontFamilyName;
+    }
+
+    // ReaderOptions owns this name so the EPUB reader does not retain the
+    // extra 64 bytes during section layout. Update that owned copy before
+    // rebuilding the screen; otherwise it redraws the previously selected
+    // family even though the new value was persisted successfully.
+    if (familyName && familyName[0] != '\0') {
+      hasDictionaryFontOverride = true;
+      if (familyName != dictionaryFontFamilyName) {
+        std::strncpy(dictionaryFontFamilyName, familyName, sizeof(dictionaryFontFamilyName) - 1);
+        dictionaryFontFamilyName[sizeof(dictionaryFontFamilyName) - 1] = '\0';
+      }
+    } else {
+      hasDictionaryFontOverride = false;
+      std::strncpy(dictionaryFontFamilyName, SETTINGS.dictionarySdFontFamilyName, sizeof(dictionaryFontFamilyName) - 1);
+      dictionaryFontFamilyName[sizeof(dictionaryFontFamilyName) - 1] = '\0';
+      dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
+    }
+    if (dictionaryFontChangedCallback) {
+      dictionaryFontChangedCallback(dictionaryFontChangedContext,
+                                    hasDictionaryFontOverride ? dictionaryFontFamilyName : nullptr,
+                                    dictionaryFontPointSize);
+    }
+    rebuildSettingsList();
+    requestUpdate();
+  });
+  requestUpdate();
+}
+
+void ReaderOptionsActivity::openDictionaryFontSizePicker(const SettingInfo& setting) {
+  const size_t optionCount = setting.enumRawValues.size();
+  if (optionCount == 0) return;
+
+  uint8_t currentIndex = hasDictionaryFontOverride
+                             ? enumDisplayIndexForRawValue(setting, dictionaryFontPointSize)
+                             : 0;
+  if (currentIndex >= optionCount) currentIndex = 0;
+  const SettingInfo selectedSetting = setting;
+  optionPopup.show(setting.nameId, selectedSetting.enumStringValues, currentIndex, [this, selectedSetting](int index) {
+    const uint8_t pointSize = enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(index));
+    if (!hasDictionaryFontOverride) {
+      if (index == 0) {
+        dictionaryFontPointSize = SETTINGS.dictionaryFontPointSize;
+      } else if (dictionaryFontFamilyName[0] != '\0') {
+        hasDictionaryFontOverride = true;
+        dictionaryFontPointSize = pointSize;
+      }
+    } else {
+      dictionaryFontPointSize = pointSize;
+    }
+    if (dictionaryFontChangedCallback) {
+      dictionaryFontChangedCallback(dictionaryFontChangedContext,
+                                    hasDictionaryFontOverride ? dictionaryFontFamilyName : nullptr,
+                                    dictionaryFontPointSize);
+    }
+    requestUpdate();
+  });
+  requestUpdate();
+}
+
 void ReaderOptionsActivity::openScreenMarginPicker(const SettingInfo& setting) {
   const uint8_t optionCount = valueOptionCount(setting);
   if (optionCount == 0 || setting.valuePtr == nullptr) return;
@@ -294,6 +443,16 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
                              rebuildSettingsList();
                              requestUpdate();
                            });
+    return;
+  }
+
+  if (setting.nameId == StrId::STR_DICTIONARY_FONT && setting.type == SettingType::ENUM) {
+    openDictionaryFontPicker(setting);
+    return;
+  }
+
+  if (setting.nameId == StrId::STR_DICTIONARY_FONT_SIZE && setting.type == SettingType::ENUM) {
+    openDictionaryFontSizePicker(setting);
     return;
   }
 
@@ -494,7 +653,7 @@ void ReaderOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* user
 
 void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
   screen.setContentMargin(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
       static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
@@ -529,6 +688,37 @@ void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
       values[i] = settingEnumOptionLabel(setting, displayValue < settingEnumOptionCount(setting) ? displayValue : 0);
     } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
       values[i] = settingEnumOptionLabel(setting, setting.valueGetter());
+    } else if (setting.nameId == StrId::STR_DICTIONARY_FONT) {
+      if (!hasDictionaryFontOverride) {
+        values[i] = tr(STR_DICT_USE_GLOBAL);
+        if (dictionaryFontFamilyName[0] != '\0') {
+          values[i] += " (";
+          values[i] += dictionaryFontFamilyName;
+          values[i] += ')';
+        }
+      } else if (dictionaryFontFamilyName[0] != '\0') {
+        values[i] = dictionaryFontFamilyName;
+        if (!sdFontSystem.registry().findFamily(dictionaryFontFamilyName)) {
+          values[i] += " (";
+          values[i] += tr(STR_UNAVAILABLE);
+          values[i] += ')';
+        }
+      } else {
+        values[i] = tr(STR_USE_READER_FONT);
+      }
+    } else if (setting.nameId == StrId::STR_DICTIONARY_FONT_SIZE) {
+      if (!hasDictionaryFontOverride) {
+        values[i] = tr(STR_DICT_USE_GLOBAL);
+        if (dictionaryFontPointSize != 0) {
+          values[i] += " (";
+          values[i] += fontSizePointLabel(dictionaryFontPointSize);
+          values[i] += ')';
+        }
+      } else {
+        const uint8_t displayValue = enumDisplayIndexForRawValue(setting, dictionaryFontPointSize);
+        values[i] =
+            settingEnumOptionLabel(setting, displayValue < settingEnumOptionCount(setting) ? displayValue : 0);
+      }
     } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
       values[i] = formatSettingValue(setting);
     }
@@ -566,7 +756,10 @@ void ReaderOptionsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  header.x = safe.x;
+  header.width = safe.width;
   if (mappedInput.hasTouchHardware()) {
     TouchHeaderBackButton::draw(renderer, uiTarget, header, tr(STR_READER_OPTIONS), true);
   } else {
@@ -581,6 +774,8 @@ void ReaderOptionsActivity::render(RenderLock&&) {
                                ((*currentSettings)[selectedIndex].type == SettingType::ACTION ||
                                 (*currentSettings)[selectedIndex].type == SettingType::SUBMENU ||
                                 (*currentSettings)[selectedIndex].nameId == StrId::STR_FONT_FAMILY ||
+                                (*currentSettings)[selectedIndex].nameId == StrId::STR_DICTIONARY_FONT ||
+                                (*currentSettings)[selectedIndex].nameId == StrId::STR_DICTIONARY_FONT_SIZE ||
                                 currentSettingUsesOptionMenu((*currentSettings)[selectedIndex]));
   const bool selectedLineHeight = selectedIndex >= 0 && selectedIndex < settingsCount &&
                                   (*currentSettings)[selectedIndex].valuePtr == &CrossPointSettings::lineHeightPercent;

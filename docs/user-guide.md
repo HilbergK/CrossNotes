@@ -47,6 +47,7 @@ For focused reference material, see [Reader Features](./reader-features.md),
     - [Chapter Navigation](#chapter-navigation)
     - [Auto Page Turn](#auto-page-turn)
     - [Tilt Page Turn (X3 and Sticky)](#tilt-page-turn-x3-and-sticky)
+    - [Touch Reader Controls](#touch-reader-controls)
     - [Footnote Navigation](#footnote-navigation)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
@@ -254,6 +255,11 @@ device model and build.
 - **Reader Dark Mode**, **Embedded Style**, **Images**, **Bionic Reading**, and
   **Guide Dots** are directly available from the Reader settings. See
   [Reader Features](./reader-features.md) for their behavior.
+
+- **Touch Reader Controls**: Enable or disable touchscreen page turns and
+  reader gestures on supported devices. **Disable Touchscreen** blocks touch
+  input while a book is open, while leaving touch available in reader menus so
+  you can turn it back on.
 
 - **Customize Status Bar**: Configure the status bar displayed while reading:
   - Chapter Page Count - Show/Hide the current page in the chapter (ex: 5/25). Page count may change based on the font size and margins set.
@@ -575,6 +581,26 @@ Auto Page Turn automatically advances pages at a set interval, useful for hands-
 ### Tilt Page Turn (X3 and Sticky)
 
 On the **Xteink X3** and **Sticky**, the gyroscope can be used to turn pages by tilting the device. This feature and its left-right or forward-back direction are available in **Settings -> Controls**.
+
+### Touch Reader Controls
+
+On supported touchscreen devices, **Touch Reader Controls** is enabled by
+default. In an open EPUB, tap the left third of the page to go back; tap the
+rest of the page to go forward. You can also swipe right for the previous page
+or left for the next page. The top and bottom gesture bands are reserved for
+vertical gestures, so taps in those bands do not turn pages.
+
+Swipe down to open the reader menu and swipe up to return Home. On an X4 Pro,
+which has a capacitive Home key, the vertical gestures are reversed: swipe up
+to open the reader menu, and use a short press of the Home key to return Home.
+A long press of that key also opens the reader menu.
+
+Turn **Touch Reader Controls** off in **Reader Options** to disable these
+page-turn and gesture controls. **Disable Touchscreen** prevents touch input
+while a book is open but keeps it available in reader menus. For the different
+touch selection gestures used by [dictionary lookup](./dictionary.md#looking-up-a-word)
+and [clippings](./reader-features.md#clippings-and-highlights), see those
+feature guides.
 
 ### Footnote Navigation
 

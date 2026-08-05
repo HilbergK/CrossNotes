@@ -61,18 +61,8 @@ uint8_t closestBuiltinStoredSize(const uint8_t targetPointSize) {
 }
 
 uint8_t currentFontPointSize(const SdCardFontRegistry* registry) {
-  if (registry && SETTINGS.sdFontFamilyName[0] != '\0') {
-    const SdCardFontFamilyInfo* family = registry->findFamily(SETTINGS.sdFontFamilyName);
-    if (family) {
-      const std::vector<uint8_t> sizes = family->availableSizes();
-      if (!sizes.empty()) {
-        const uint8_t index =
-            SETTINGS.fontSize < sizes.size() ? SETTINGS.fontSize : static_cast<uint8_t>(sizes.size() - 1);
-        return sizes[index];
-      }
-    }
-  }
-  return CrossPointSettings::getReaderFontPointSize(SETTINGS.getEffectiveReaderFontSize());
+  (void)registry;
+  return SETTINGS.readerFontPointSize;
 }
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
@@ -227,13 +217,14 @@ void FontSelectionActivity::handleSelection() {
   if (font.settingIndex < CrossPointSettings::BUILTIN_FONT_COUNT) {
     SETTINGS.fontFamily = font.settingIndex;
     SETTINGS.sdFontFamilyName[0] = '\0';
-    SETTINGS.fontSize = closestBuiltinStoredSize(targetPointSize);
+    SETTINGS.readerFontPointSize = CrossPointSettings::getReaderFontPointSize(
+        static_cast<CrossPointSettings::FONT_SIZE>(closestBuiltinStoredSize(targetPointSize)));
   } else if (registry_) {
     const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
     const auto& families = registry_->getFamilies();
     if (sdIdx < static_cast<int>(families.size())) {
       const std::vector<uint8_t> sizes = families[sdIdx].availableSizes();
-      SETTINGS.fontSize = closestSizeIndex(sizes, targetPointSize);
+      SETTINGS.readerFontPointSize = sizes[closestSizeIndex(sizes, targetPointSize)];
       strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
     }

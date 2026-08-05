@@ -170,6 +170,11 @@ void Wrapper::onSpan(const StyledSpan& span) {
   }
 }
 
+void Wrapper::lineBreak(const uint8_t indent, const bool listItem) {
+  flushLine();
+  startLine(indent, listItem);
+}
+
 void Wrapper::finish() { flushLine(); }
 
 // --------------------------------------------------------------------------

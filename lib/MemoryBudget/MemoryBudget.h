@@ -38,6 +38,11 @@ constexpr uint32_t EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC = 80U * 1024U
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_FREE = 96U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC = 48U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_PREFETCH_AFTER_SD_FONT_RELEASE_MIN_FREE = 88U * 1024U;
+// Initial C3 guard for switching to a different dictionary .cpfont. Both total
+// free heap and contiguous maxAlloc matter because font metadata and prewarm
+// arenas are separate allocations. Hardware stress logs should tune these.
+constexpr uint32_t DICTIONARY_SD_FONT_MIN_FREE = 64U * 1024U;
+constexpr uint32_t DICTIONARY_SD_FONT_MIN_MAX_ALLOC = 32U * 1024U;
 constexpr uint32_t IMAGE_DECODER_HEADROOM = 16U * 1024U;
 constexpr uint32_t JPEG_DECODER_APPROX_BYTES = 20U * 1024U;
 constexpr uint32_t EPUB_INLINE_JPEG_MIN_FREE = JPEG_DECODER_APPROX_BYTES + IMAGE_DECODER_HEADROOM;
@@ -70,6 +75,19 @@ inline void logHeapShape(const char* stage) {
 
 inline bool hasHeap(const HeapSnapshot heap, const uint32_t minFree, const uint32_t minMaxAlloc) {
   return heap.freeHeap >= minFree && heap.maxAllocHeap >= minMaxAlloc;
+}
+
+// Text layout starts with small, fallible allocations: a 4 KB scratch arena and
+// a ParsedText object. The operations which really need a large contiguous block
+// (table buffering, advance prewarming, and image decoding) each have their own
+// max-allocation gate. Do not reject a whole chapter merely because fragmentation
+// leaves the general 32 KB background-build threshold a few bytes short.
+inline bool hasHeapForEpubTextLayoutStart(const HeapSnapshot heap) {
+  return heap.freeHeap >= EPUB_TEXT_LAYOUT_MIN_FREE;
+}
+
+inline bool hasHeapForDictionarySdFont(const HeapSnapshot heap) {
+  return hasHeap(heap, DICTIONARY_SD_FONT_MIN_FREE, DICTIONARY_SD_FONT_MIN_MAX_ALLOC);
 }
 
 inline char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }

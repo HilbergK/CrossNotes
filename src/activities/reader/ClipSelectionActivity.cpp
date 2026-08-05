@@ -366,13 +366,17 @@ void ClipSelectionActivity::applyWordStyle(const WordRef& word, const ClipWordSt
 
   const bool fill = (style.flags & ClipWordStyle::FILL) != 0;
   if (fill) {
-    // Add foreground-colored dither without clearing the word's existing pixels.
-    // This preserves the snapshotted glyphs and avoids a font-cache
-    // allocation/redraw on every selection step.
+    // Build the highlight from the existing framebuffer instead of redrawing
+    // the word, which avoids font-cache work on every selection step.
     for (int y = word.y; y < word.y + word.h; y += 2) {
       for (int x = drawX; x < drawX + drawW; x += 2) {
         renderer.drawPixel(x, y, foregroundBlack);
       }
+    }
+    if (!foregroundBlack) {
+      // Dark mode starts with white text on black. Inverting after adding the
+      // dither produces black text on a light-gray highlight.
+      renderer.invertRect(drawX, word.y, drawW, word.h);
     }
   }
 
@@ -394,7 +398,8 @@ void ClipSelectionActivity::drawHighlights() {
   // the reader's line height has no spare leading. The fill and cursor border
   // already distinguish the selected range and its active endpoint.
   static constexpr ClipWordStyle selectionStyle{ClipWordStyle::FILL};
-  static constexpr ClipWordStyle cursorStyle{ClipWordStyle::BORDER};
+  static constexpr ClipWordStyle initialCursorStyle{ClipWordStyle::FILL | ClipWordStyle::BORDER};
+  static constexpr ClipWordStyle selectedCursorStyle{ClipWordStyle::BORDER};
 
   if (startMarkIdx != -1) {
     const int from = std::min(startMarkIdx, cursorIdx);
@@ -409,7 +414,9 @@ void ClipSelectionActivity::drawHighlights() {
 
   const WordRef& cursorWord = wordStore.words[readingOrder[cursorIdx]];
   if (cursorWord.pageIdx == currentDisplayPage) {
-    applyWordStyle(cursorWord, cursorStyle);
+    // Before the first endpoint, the cursor supplies its own fill. Afterwards
+    // selectionStyle has already filled it, so only add the active border.
+    applyWordStyle(cursorWord, startMarkIdx == -1 ? initialCursorStyle : selectedCursorStyle);
   }
 }
 

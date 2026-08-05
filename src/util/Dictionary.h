@@ -194,7 +194,8 @@ class Dictionary {
 
   // Binary search a device-generated sampled .qidx sidecar.
   static bool binarySearchQuickIndex(HalFile& qidx, HalFile& idx, uint32_t sampleCount, const char* target,
-                                     uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte);
+                                     uint32_t idxFileSize, uint32_t* startByte, uint32_t* endByte,
+                                     uint32_t* matchedSample = nullptr);
 
   static bool buildQuickIndex(HalFile& idx, uint32_t idxFileSize, uint8_t suffixBytes, const char* qidxPath,
                               const DictLookupCallbacks& cbs);

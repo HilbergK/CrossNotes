@@ -411,7 +411,9 @@ std::string WordSelectNavigator::finishTouchMultiSelect() {
 bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                                      const GfxRenderer& renderer) {
   bytes_ = 0;
-  const size_t bytes = renderer.readFramebufferRegion(x, y, w, h, buf_, sizeof(buf_));
+  if (!storage_) return false;
+  const size_t bytes =
+      renderer.readFramebufferRegion(x, y, w, h, storage_->bytes, HighlightSnapshotStorage::MAX_SNAPSHOT_BYTES);
   if (bytes == 0) return false;
   x_ = x;
   y_ = y;
@@ -422,8 +424,15 @@ bool WordSelectNavigator::HighlightSnapshot::capture(uint16_t x, uint16_t y, uin
 }
 
 void WordSelectNavigator::HighlightSnapshot::restore(GfxRenderer& renderer) const {
-  if (!valid()) return;
-  renderer.writeFramebufferRegion(x_, y_, w_, h_, buf_);
+  if (!valid() || !storage_) return;
+  renderer.writeFramebufferRegion(x_, y_, w_, h_, storage_->bytes);
+}
+
+void WordSelectNavigator::releaseWorkingSet() {
+  reset();
+  std::vector<WordInfo>().swap(words);
+  std::vector<Row>().swap(rows);
+  std::string().swap(textPool);
 }
 
 void WordSelectNavigator::renderHighlight(const GfxRenderer& renderer, int lineHeight) const {

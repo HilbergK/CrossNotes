@@ -6,7 +6,6 @@
 #include <I18n.h>
 #include <Memory.h>
 #include <WiFi.h>
-#include <esp_task_wdt.h>
 
 #include <cstddef>
 
@@ -418,7 +417,7 @@ void CrossPointWebServerActivity::loop() {
       }
     }
 
-    // Handle web server requests - maximize throughput with watchdog safety
+    // Handle web server requests while keeping input responsive.
     if (webServer && webServer->isRunning()) {
       const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
 
@@ -427,18 +426,11 @@ void CrossPointWebServerActivity::loop() {
         LOG_DBG("WEBACT", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
       }
 
-      // Reset watchdog BEFORE processing - HTTP header parsing can be slow
-      esp_task_wdt_reset();
-
       // Process HTTP requests in tight loop for maximum throughput
       // More iterations = more data processed per main loop cycle
       constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
-        // Reset watchdog every 32 iterations
-        if ((i & 0x1F) == 0x1F) {
-          esp_task_wdt_reset();
-        }
         // Yield and check for exit button every 64 iterations
         if ((i & 0x3F) == 0x3F) {
           yield();
