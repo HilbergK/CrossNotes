@@ -34,6 +34,14 @@ class KeyboardEntryActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
 
+  // CrossInk Notes: hold off the idle timer while something has been typed.
+  // Sleep replaces the activity stack by calling onExit() straight down it and
+  // never delivers a pending result, so anything entered here is gone with no
+  // warning — and pausing to think mid-sentence is exactly when the idle
+  // timeout fires. Only while text is present, so a keyboard left open and
+  // untouched still lets the device sleep normally.
+  bool preventAutoSleep() override { return !text.empty(); }
+
  private:
   std::string title;
   std::string text;
