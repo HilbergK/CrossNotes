@@ -795,85 +795,13 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
-  listLeft = bounds.x;
-  listWidth = bounds.width;
-  // CrossInk Notes: the subtitle carries tag + chapter + note, so render it in
-  // a genuinely smaller face to fit more in. FreeInkUI addresses fonts by slot
-  // (FONT_SMALL/BODY/TITLE), and uiScaleSpec() binds SMALL to the same font as
-  // BODY — so rebind this activity's SMALL slot and keep the row label on BODY.
-  // uiTarget belongs to this activity, so no other screen is affected.
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_SMALL, SUBTITLE_FONT_ID);
-  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
-  props.subtitleText.font = fui::GfxRendererTarget::FONT_SMALL;
-  props.subtitleText.bold = false;
-  // CrossInk Notes: the list draws only a label and a subtitle, but a row shows
-  // three lines here (clipping / chapter / tag+note). Grow the row so there is
-  // room for the third line, which render() draws itself. The widget centres
-  // the label+subtitle block, so the extra height is split above and below —
-  // reserve two line heights to leave a full line clear at the bottom.
-  // The row holds the clipping and the chapter; the note goes in the gap below
-  // it. Reserving the note's space inside the row instead would force an equal
-  // amount of dead space above it, because the widget centres the
-  // label+subtitle block vertically — so the row hugs its two lines and the
-  // selection highlight stays centred on them.
-  noteLineHeight = renderer.getLineHeight(SUBTITLE_FONT_ID);
-  const int labelLineHeight = renderer.getLineHeight(uiScaleSpec().bodyFontId);
-  constexpr int kRowPadding = 6;
-  int rowHeight = labelLineHeight + noteLineHeight + kRowPadding;
-  if (mappedInput.hasTouchHardware()) {
-    rowHeight = std::max(rowHeight, static_cast<int>(uiListRowHeight(screen.theme(), UiListRowType::WithSubtitle)));
-  }
-  props.rowHeight = static_cast<int16_t>(rowHeight);
-  // Widen the row gap to hold the note line plus a little air before the next
-  // row. listVisibleRows() accounts for the gap, so paging stays correct.
-  props.rowGap = static_cast<int16_t>(noteLineHeight + kRowPadding);
-  // Draw every row unselected: no background on any state. An entry spans three
-  // lines but the widget only knows about two, so it cannot highlight the whole
-  // thing — render() inverts the complete entry in one pass instead. Painting
-  // the row and the note line separately left a seam at their edges, let the
-  // two halves drift apart while scrolling, and skipped the note's line
-  // entirely when a clipping had no note.
-  fui::StyleSet rowStyles;
-  rowStyles.normal.background = fui::Paint::none();
-  rowStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
-  rowStyles.selected = rowStyles.normal;
-  rowStyles.focused = rowStyles.normal;
-  rowStyles.active = rowStyles.normal;
-  rowStyles.disabled = rowStyles.normal;
-  rowStyles.explicitlySet = true;
-  props.rowStyles = rowStyles;
-  const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
+  // CrossInk Notes: three-line rows (clipping / chapter / tag+note) — see
+  // NotesListLayout for the row geometry and the single-pass selection.
+  const auto rows = notesLayout.configure(props, uiTarget, screen.theme(), bounds, renderer, mappedInput,
+                                          static_cast<int>(count));
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
   visibleRows = rows > 0 ? rows : 1;
-  // CrossInk Notes: resolve where a row's text actually starts. FreeInkApp::list
-  // overwrites the ListProps defaults with theme values before drawing (side
-  // padding, row inset, scroll track), so those theme values — not the struct
-  // defaults — decide the row geometry. Mirror the same math here so the third
-  // line lines up on every device and theme.
-  {
-    const auto& th = screen.theme();
-    const int rowInset = th.listInset < 0 ? 0 : th.listInset;
-    const int sidePad = th.listSidePadding < 0 ? 8 : th.listSidePadding;
-    const int scrollW = th.listScrollWidth < 0 ? 3 : th.listScrollWidth;
-    const int scrollIns = th.listScrollInset < 0 ? 0 : th.listScrollInset;
-    const bool scrollLeft = th.listScrollSide == 1;
-    int areaX = static_cast<int>(bounds.x) + rowInset;
-    int areaW = static_cast<int>(bounds.width) - rowInset * 2;
-    if (static_cast<int>(count) > visibleRows && scrollW > 0) {
-      const int needed = scrollW + scrollIns + 2;
-      if (rowInset < needed) {
-        const int cut = needed - rowInset;
-        areaW -= cut;
-        if (scrollLeft) areaX += cut;
-      }
-    }
-    noteRowLeft = areaX;
-    noteRowWidth = areaW;
-    noteTextLeft = areaX + sidePad;
-    noteMaxWidth = std::max(0, areaW - sidePad * 2);
-  }
-
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(count));
   props.topIndex = static_cast<uint16_t>(topIndex);
   const int end = std::min(static_cast<int>(count), topIndex + visibleRows);
@@ -1043,57 +971,24 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   app.render();
   uiReady = true;
 
-  // CrossInk Notes: an entry is three lines — the clipping and chapter drawn by
-  // the list, plus this note line drawn underneath in the row gap. Everything
-  // is drawn unselected first; the selection is applied afterwards by inverting
-  // the whole entry in one pass (see below).
+  // CrossInk Notes: everything is drawn unselected first, then the selection is
+  // applied as one inverted block (see NotesListLayout).
   const int clippingCount = visibleCount();
   const int lastVisible = std::min(clippingCount, topIndex + visibleRows);
-  if (listRowStep > 0 && noteLineHeight > 0) {
+  if (notesLayout.ready()) {
     for (int i = topIndex; i < lastVisible; ++i) {
       const size_t slot = static_cast<size_t>(i - topIndex);
-      if (slot >= uiNotes.size() || uiNotes[slot].empty()) continue;
-      const int rowY = listTop + static_cast<int>(slot) * listRowStep;
-      // Just under the row, in the gap. This also groups each entry visually:
-      // the chapter sits tight under its clipping, the note a little further
-      // down, rather than all three being evenly spaced.
-      const int noteY = rowY + listRowHeight + 2;
-      if (noteY + noteLineHeight > listBottom) break;
-      const std::string line = renderer.truncatedText(SUBTITLE_FONT_ID, uiNotes[slot].c_str(), noteMaxWidth);
-      renderer.drawText(SUBTITLE_FONT_ID, noteTextLeft, noteY, line.c_str(), true);
-    }
-  }
-
-  // CrossInk Notes: the selection. The list widget paints no row background
-  // (see the row styles in buildListScreen), so the whole entry — clipping,
-  // chapter and note line — is inverted here as a single rectangle. Doing it in
-  // one pass is what keeps the highlight seamless, keeps it from splitting
-  // apart while scrolling, and still covers the note's line when a clipping has
-  // no note.
-  // CrossInk Notes: the filter control. One short line at the top of its row,
-  // closed off with a hairline rule so it reads as a divider above the
-  // clippings instead of a large empty row.
-  if (showFilterRow && listRowStep > 0 && topIndex == 0 && noteLineHeight > 0) {
-    const int textY = listTop + 2;
-    if (textY + noteLineHeight <= listBottom) {
-      const std::string label = renderer.truncatedText(SUBTITLE_FONT_ID, filterRowLabel.c_str(), noteMaxWidth);
-      renderer.drawText(SUBTITLE_FONT_ID, noteTextLeft, textY, label.c_str(), true);
-      const int ruleY = textY + noteLineHeight + 3;
-      if (ruleY < listBottom) {
-        renderer.drawLine(noteRowLeft, ruleY, noteRowLeft + noteRowWidth - 1, ruleY);
+      if (slot >= uiNotes.size()) break;
+      if (isFilterRow(i)) {
+        notesLayout.drawHeaderLine(renderer, static_cast<int>(slot), filterRowLabel);
+        continue;
       }
+      notesLayout.drawThirdLine(renderer, static_cast<int>(slot), uiNotes[slot]);
     }
-  }
-
-  if (listRowStep > 0 && selectedIndex >= topIndex && selectedIndex < lastVisible) {
-    const int rowY = listTop + (selectedIndex - topIndex) * listRowStep;
-    // Cover the row and its note line, leaving the sliver before the next entry
-    // clear so consecutive selections never look merged. The filter row only
-    // draws one line, so its highlight matches that instead of the full row.
-    const int wanted = isFilterRow(selectedIndex) ? (noteLineHeight + 4) : (listRowStep - 2);
-    const int height = std::min(wanted, listBottom - rowY);
-    if (height > 0) {
-      renderer.invertRect(noteRowLeft, rowY, noteRowWidth, height);
+    if (selectedIndex >= topIndex && selectedIndex < lastVisible) {
+      const int slot = selectedIndex - topIndex;
+      notesLayout.drawSelection(renderer, slot,
+                                isFilterRow(selectedIndex) ? notesLayout.headerBandHeight() : -1);
     }
   }
 

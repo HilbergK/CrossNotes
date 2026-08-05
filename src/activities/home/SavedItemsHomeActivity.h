@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/NotesListLayout.h"
 #include "util/ButtonNavigator.h"
 
 struct SavedBookEntry {
@@ -49,11 +50,7 @@ class SavedItemsHomeActivity final : public Activity {
   // long author can no longer truncate them away. Geometry is resolved from the
   // theme in buildListScreen() and used by render().
   std::array<std::string, 20> uiCounts;
-  int countLineHeight = 0;
-  int countTextLeft = 0;
-  int countMaxWidth = 0;
-  int rowFillLeft = 0;
-  int rowFillWidth = 0;
+  crossnotes::NotesListLayout notesLayout;
 
   int listTop = 0;
   int listBottom = 0;

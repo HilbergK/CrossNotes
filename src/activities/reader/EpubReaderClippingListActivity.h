@@ -11,6 +11,7 @@
 #include "ClippingStore.h"
 #include "NoteStore.h"
 #include "activities/Activity.h"
+#include "components/NotesListLayout.h"
 #include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
@@ -55,11 +56,6 @@ class EpubReaderClippingListActivity final : public Activity {
   // draws a label and a subtitle, so this line is drawn over the rendered rows
   // in the space reserved by the taller rowHeight.
   std::array<std::string, 20> uiNotes;
-  int listLeft = 0;
-  int listWidth = 0;
-  int noteLineHeight = 0;
-  // Where the note line is drawn, resolved from the theme's list geometry so it
-  // lines up with the rows the widget draws on any device/theme.
   // CrossInk Notes: tag filter. visibleClippings maps a row position to its
   // index in ClippingStore, so the list can show a subset without anything else
   // having to know: every store access goes through storeIndexFor(). An empty
@@ -67,6 +63,7 @@ class EpubReaderClippingListActivity final : public Activity {
   std::vector<uint16_t> visibleClippings;
   char tagFilter = 0;
   OptionPopup optionPopup;
+  crossnotes::NotesListLayout notesLayout;
 
   // A filter row sits above the clippings when the book uses more than one tag,
   // so the filter is reachable by scrolling up instead of through the menu.
@@ -87,10 +84,6 @@ class EpubReaderClippingListActivity final : public Activity {
   }
   void showTagFilterMenu();
 
-  int noteTextLeft = 0;
-  int noteMaxWidth = 0;
-  int noteRowLeft = 0;
-  int noteRowWidth = 0;
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
