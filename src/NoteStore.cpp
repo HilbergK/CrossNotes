@@ -42,7 +42,12 @@ void NoteStore::recoverIfInterrupted(const std::string& path) {
 }
 
 void NoteStore::loadForBook(const char* filePath, const char* /*bookType*/) {
-  if (loaded && bookFilePath == filePath) return;
+  // Retry when the last attempt failed. A momentary SD hiccup sets loadFailed
+  // exactly like real corruption does, and without this the early return meant
+  // reopening the same book never tried again — saving stayed blocked for the
+  // rest of the session unless the user happened to visit another book first.
+  // Re-reading costs one file open; genuine corruption simply fails again.
+  if (loaded && !loadFailed && bookFilePath == filePath) return;
   unload();
   bookFilePath = filePath;
   const std::string path = notesFilePath(filePath);

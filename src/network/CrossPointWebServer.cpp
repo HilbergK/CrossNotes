@@ -2275,17 +2275,28 @@ void CrossPointWebServer::handlePostNote() {
   NOTES.loadForBook(path.c_str(), "epub");
 
   const bool tagWillBeEmpty = !hasTag || tagStr.empty();
+  bool ok = false;
   if (text.empty() && tagWillBeEmpty) {
-    NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
+    ok = NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
   } else {
     // Always write text (even "") so an intentionally-cleared note body is
     // actually blanked rather than left stale. applyTag is false when the
     // client sent no "tag" key, which leaves any existing tag alone.
-    NOTES.saveNoteAndTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str(),
-                         tagStr.empty() ? 0 : tagStr[0], hasTag);
+    ok = NOTES.saveNoteAndTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str(),
+                              tagStr.empty() ? 0 : tagStr[0], hasTag);
   }
 
   NOTES.unload();
+
+  // The device-side paths already report a refused write; this one answered
+  // 200 regardless. That matters more now the store declines to overwrite a
+  // notes file it could not read — those saves are a guaranteed no-op, and the
+  // browser would have gone on showing "Saved" for every one of them.
+  if (!ok) {
+    server->send(500, "text/plain", "Could not save note");
+    LOG_ERR("WEB", "Note save failed for path: %s", path.c_str());
+    return;
+  }
 
   server->send(200, "text/plain", "OK");
   LOG_DBG("WEB", "Saved note for path: %s", path.c_str());

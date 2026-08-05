@@ -208,6 +208,7 @@ function exportNotes() {
     return;
   }
 
+  captureUnsavedEdits();  // export what is on screen, including text not yet saved
   const title = currentBookTitle();
   const shown = filteredHighlights();
   if (shown.length === 0) {
