@@ -41,6 +41,21 @@ class NoteStore {
 
   const std::vector<Note>& getNotes() const { return notes; }
 
+  // Identifies a clipping that still exists, for pruneMissing(). Kept as a
+  // plain key so NoteStore does not need to know about ClippingStore.
+  struct ClippingKey {
+    uint16_t spineIndex;
+    uint16_t startPage;
+    uint16_t startWordIndex;
+    uint32_t timestamp;
+  };
+
+  // Drop notes whose clipping is gone. Notes only ever display next to a
+  // clipping, so an orphan is invisible but still counted — which made the
+  // per-book counts read high. Returns how many were removed; call with the
+  // book's notes already loaded.
+  uint16_t pruneMissing(const char* filePath, const std::vector<ClippingKey>& live);
+
   // Returns nullptr if no note exists for this clipping. clippingTimestamp
   // should be the clipping's own creation timestamp (Clipping::timestamp) —
   // required to disambiguate clippings that otherwise share the same

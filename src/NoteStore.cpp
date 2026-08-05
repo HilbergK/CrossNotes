@@ -4,6 +4,7 @@
 #include <uzlib.h>
 
 #include <cinttypes>  // for PRIx32 (not guaranteed via <cstdint>)
+#include <algorithm>
 #include <cstring>
 
 static constexpr const char* LOG_TAG = "NoteStore";
@@ -241,6 +242,37 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
 }
 
 // ─── Migration / bulk delete ────────────────────────────────────────────────
+
+uint16_t NoteStore::pruneMissing(const char* filePath, const std::vector<ClippingKey>& live) {
+  if (!loaded || bookFilePath != filePath) return 0;
+
+  const size_t before = notes.size();
+  notes.erase(std::remove_if(notes.begin(), notes.end(),
+                             [&live](const Note& n) {
+                               for (const auto& k : live) {
+                                 if (k.spineIndex != n.spineIndex || k.startPage != n.startPage ||
+                                     k.startWordIndex != n.startWordIndex) {
+                                   continue;
+                                 }
+                                 // Legacy notes (clippingTimestamp 0) match on position alone.
+                                 if (n.clippingTimestamp == 0 || n.clippingTimestamp == k.timestamp) return false;
+                               }
+                               return true;  // no surviving clipping — drop it
+                             }),
+              notes.end());
+
+  const auto removed = static_cast<uint16_t>(before - notes.size());
+  if (removed > 0) {
+    const std::string path = notesFilePath(filePath);
+    if (notes.empty()) {
+      if (Storage.exists(path.c_str())) Storage.remove(path.c_str());
+    } else {
+      saveToFile(path);
+    }
+    LOG_INF(LOG_TAG, "Pruned %u orphaned note(s) for %s", removed, filePath);
+  }
+  return removed;
+}
 
 uint16_t NoteStore::countForFilePath(const std::string& filePath) {
   const std::string path = notesFilePath(filePath.c_str());

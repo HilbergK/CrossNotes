@@ -232,6 +232,17 @@ void EpubReaderClippingListActivity::onEnter() {
   // book path from there too.
   if (!CLIPPINGS.getBookFilePath().empty()) {
     NOTES.loadForBook(CLIPPINGS.getBookFilePath().c_str(), "epub");
+    // Both sides are loaded here, so this is the natural place to drop notes
+    // whose clipping is gone. They never displayed (a note is only shown beside
+    // its clipping) but were still counted, which made the per-book counts on
+    // the Notes and Bookmarks screen read high.
+    std::vector<NoteStore::ClippingKey> live;
+    live.reserve(CLIPPINGS.clippingCount());
+    for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
+      const Clipping* c = CLIPPINGS.clippingAt(i);
+      if (c) live.push_back({c->spineIndex, c->startPage, c->startWordIndex, c->timestamp});
+    }
+    NOTES.pruneMissing(CLIPPINGS.getBookFilePath().c_str(), live);
   }
   rebuildVisibleClippings();
   selectedIndex = filterRowOffset();  // start on the first clipping
@@ -871,7 +882,10 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
     if (isFilterRow(i)) {
       // The filter row: a normal selectable row so it can be reached by
       // scrolling up, with no chapter or note line beneath it.
-      uiLabels[slot] = filterRowLabel;
+      // Blank in the widget: render() draws the label itself at the top of the
+      // row so the control reads as one short line rather than filling a row
+      // sized for three.
+      uiLabels[slot].clear();
       uiSubtitles[slot].clear();
       uiNotes[slot].clear();
       fui::ListItem& filterItem = uiItems[static_cast<size_t>(i)];
@@ -1056,11 +1070,28 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
   // one pass is what keeps the highlight seamless, keeps it from splitting
   // apart while scrolling, and still covers the note's line when a clipping has
   // no note.
+  // CrossInk Notes: the filter control. One short line at the top of its row,
+  // closed off with a hairline rule so it reads as a divider above the
+  // clippings instead of a large empty row.
+  if (showFilterRow && listRowStep > 0 && topIndex == 0 && noteLineHeight > 0) {
+    const int textY = listTop + 2;
+    if (textY + noteLineHeight <= listBottom) {
+      const std::string label = renderer.truncatedText(SUBTITLE_FONT_ID, filterRowLabel.c_str(), noteMaxWidth);
+      renderer.drawText(SUBTITLE_FONT_ID, noteTextLeft, textY, label.c_str(), true);
+      const int ruleY = textY + noteLineHeight + 3;
+      if (ruleY < listBottom) {
+        renderer.drawLine(noteRowLeft, ruleY, noteRowLeft + noteRowWidth - 1, ruleY);
+      }
+    }
+  }
+
   if (listRowStep > 0 && selectedIndex >= topIndex && selectedIndex < lastVisible) {
     const int rowY = listTop + (selectedIndex - topIndex) * listRowStep;
     // Cover the row and its note line, leaving the sliver before the next entry
-    // clear so consecutive selections never look merged.
-    const int height = std::min(listRowStep - 2, listBottom - rowY);
+    // clear so consecutive selections never look merged. The filter row only
+    // draws one line, so its highlight matches that instead of the full row.
+    const int wanted = isFilterRow(selectedIndex) ? (noteLineHeight + 4) : (listRowStep - 2);
+    const int height = std::min(wanted, listBottom - rowY);
     if (height > 0) {
       renderer.invertRect(noteRowLeft, rowY, noteRowWidth, height);
     }
