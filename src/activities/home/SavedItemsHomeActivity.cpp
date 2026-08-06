@@ -66,6 +66,13 @@ SavedItemsHomeActivity::SavedItemsHomeActivity(GfxRenderer& renderer, MappedInpu
       app(uiTarget, uiTarget.deviceContext()) {}
 
 void SavedItemsHomeActivity::reloadSavedBooks() {
+  // Which book is selected, by path. The order below depends on counts, so
+  // deleting notes or bookmarks can move a book — and this runs on every return
+  // from a sub-screen. Without this the selection would stay on a row number and
+  // silently end up on a different book than the one the user was on.
+  const std::string wasSelected = (selectedIndex >= 0 && selectedIndex < static_cast<int>(books.size()))
+                                      ? books[static_cast<size_t>(selectedIndex)].bookPath
+                                      : std::string();
   books.clear();
 
   std::vector<BookmarkedBookEntry> bookmarkedBooks;
@@ -120,6 +127,25 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
     if (b.bookmarkCount > 0) {
       append(std::to_string(b.bookmarkCount) + (b.bookmarkCount == 1 ? " bookmark" : " bookmarks"));
     }
+  }
+
+  // Most-annotated first. Notes count on top of their highlight rather than
+  // instead of it: a book where most highlights carry a note represents more
+  // work than one with the same highlights and none, and should rank above it.
+  // Title breaks ties so the order is deterministic — otherwise books with
+  // equal counts would fall back to SD directory order and shuffle between
+  // visits.
+  std::sort(books.begin(), books.end(), [](const SavedBookEntry& a, const SavedBookEntry& b) {
+    const int aTotal = a.clippingCount + a.noteCount + a.bookmarkCount;
+    const int bTotal = b.clippingCount + b.noteCount + b.bookmarkCount;
+    if (aTotal != bTotal) return aTotal > bTotal;
+    return a.bookTitle < b.bookTitle;
+  });
+
+  if (!wasSelected.empty()) {
+    const auto it = std::find_if(books.begin(), books.end(),
+                                 [&wasSelected](const SavedBookEntry& b) { return b.bookPath == wasSelected; });
+    if (it != books.end()) selectedIndex = static_cast<int>(std::distance(books.begin(), it));
   }
 
   if (books.empty()) {
