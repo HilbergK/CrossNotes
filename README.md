@@ -37,14 +37,18 @@ Highlight a passage, write a note on device and/or tag it. Then open a page in a
 </td>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/notes-and-bookmarks.jpg" width="220"><br>
-<sub>Notes and Bookmarks — every saved book</sub>
+<sub>Every book with highlights, notes or bookmarks</sub>
 </td>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/clippings-list.jpg" width="220"><br>
-<sub>Clippings list with tags and note previews</sub>
+<sub>Highlights with their tag and note beneath</sub>
 </td>
 </tr>
 <tr>
+<td align="center" width="33%">
+<img src="./docs/images/crossnotes/tag-filter.jpg" width="220"><br>
+<sub>Filtered to a single tag</sub>
+</td>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/tag-picker.jpg" width="220"><br>
 <sub>Tag picker after saving a highlight</sub>
@@ -53,9 +57,15 @@ Highlight a passage, write a note on device and/or tag it. Then open a page in a
 <img src="./docs/images/crossnotes/write-note-keyboard.jpg" width="220"><br>
 <sub>Writing a note with the built-in keyboard</sub>
 </td>
+</tr>
+<tr>
 <td align="center" width="33%">
 <img src="./docs/images/crossnotes/clipping-detail-note.jpg" width="220"><br>
 <sub>Highlight detail with its note attached</sub>
+</td>
+<td align="center" colspan="2">
+<img src="./docs/images/crossnotes/highlights-web.jpg" width="460"><br>
+<sub>Notes Connect in the browser — read, tag, and write notes from any device</sub>
 </td>
 </tr>
 </table>
