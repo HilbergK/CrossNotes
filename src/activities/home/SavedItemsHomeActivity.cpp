@@ -153,6 +153,14 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
   } else if (selectedIndex >= static_cast<int>(books.size())) {
     selectedIndex = static_cast<int>(books.size()) - 1;
   }
+
+  // Bring the window to wherever the selection ended up. buildListScreen only
+  // clamps topIndex into range, so a selection that moved rows during the sort
+  // above could land outside the visible window — and render() draws the
+  // highlight only when it is inside, so the list would look like nothing was
+  // selected at all. The clipping list already does this after its own
+  // rebuilds; this screen was the one that did not.
+  topIndex = followListSelection(selectedIndex, topIndex, visibleRows, static_cast<int>(books.size()));
 }
 
 void SavedItemsHomeActivity::onEnter() {

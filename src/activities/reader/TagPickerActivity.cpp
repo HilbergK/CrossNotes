@@ -25,8 +25,6 @@ void TagPickerActivity::onEnter() {
   requestUpdate();
 }
 
-bool TagPickerActivity::preventAutoSleep() { return hasNote(); }
-
 void TagPickerActivity::openNoteKeyboard() {
   startActivityForResult(
       std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, hasNote() ? "Edit Note" : "Write Note",
