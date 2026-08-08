@@ -2578,7 +2578,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Read the Confirm release ONCE and reuse it below. wasReleased() consumes the
+  // one-shot flag set by suppressNextConfirmRelease(), but the underlying
+  // per-frame release event does not clear on read — so polling twice in the
+  // same frame burned the suppression on the first call and then reported the
+  // release on the second. That opened the reader menu on a Confirm a child
+  // screen had already claimed: pick "Open" on a highlight and the book menu
+  // appeared on top of the page you had just jumped to.
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  if (confirmReleased) {
     if (SETTINGS.longPressMenuAction != CrossPointSettings::LONG_MENU_OFF &&
         mappedInput.getHeldTime() >= longPressMenuMs) {
       const auto action = static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressMenuAction);
@@ -2623,7 +2631,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+  if (confirmReleased || ReaderUtils::isTouchMenuGesture(mappedInput)) {
     openReaderMenu();
   }
 
