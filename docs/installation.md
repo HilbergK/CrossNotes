@@ -8,7 +8,6 @@ nav_order: 2
 ## Supported Devices
 
 - Xteink X3, X4
-- Seeed Studio Sticky
 
 ## Web Installation via USB
 

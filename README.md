@@ -79,7 +79,7 @@ To build from source:
 ```sh
 git clone --recurse-submodules https://github.com/HilbergK/CrossNotes.git
 cd CrossNotes
-pio run -e default    # or sticky
+pio run -e default
 ```
 
 ## Credits
