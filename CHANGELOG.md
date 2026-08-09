@@ -1,5 +1,21 @@
 # Changelog
 
+CrossNotes is a thin layer over [CrossInk](https://github.com/uxjulia/CrossInk):
+each release is a CrossInk release plus the notes and tagging features. Both
+changelogs live here — ours first, then CrossInk's exactly as upstream writes it.
+
+| Date | CrossNotes | Built on |
+| --- | --- | --- |
+| 2026-08-08 | v1.2.0 | CrossInk v1.5.0 |
+| 2026-07-30 | v1.1.1.1 | CrossInk v1.4.0.1 |
+| 2026-07-10 | v1.1.1 | CrossInk v1.4.0 |
+| 2026-07-10 | v1.1.0 | CrossInk v1.4.0 |
+| 2026-07-08 | v1.0.0 | CrossInk v1.3.4 |
+
+---
+
+# CrossNotes releases
+
 ## [v1.2.0] - 2026-08-08 — CrossNotes
 
 Rebased onto **CrossInk v1.5.0** — see its entry below for everything that brings.
@@ -101,8 +117,11 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ---
 
-## [v1.5.0] - 2026-08-08
+# Inherited from CrossInk
 
+Upstream's changelog, unchanged apart from the version labels.
+
+## [v1.5.0] - 2026-08-08 — CrossInk
 ### Added
 
 - EPUB tables now lay out a row at a time in both Incremental and Full Section indexing, keeping regular tables readable without whole-table buffering.
@@ -177,14 +196,12 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Watchdog resets return to the crash-report flow, and power-button wake timing no longer depends on SD-card startup.
 - The web file manager and uploads now handle simulator/device ports and stalled connections safely; unsupported settings stay hidden, and the optimizer removes empty chapter stubs without breaking table-of-contents links.
 
-## [v1.4.0.1] - 2026-07-28
-
+## [v1.4.0.1] - 2026-07-28 — CrossInk
 ### Added
 
 - Updates to support Xteink device detection so the correct display panel driver is used.
 
-## [v1.4.0] - 2026-07-10
-
+## [v1.4.0] - 2026-07-10 — CrossInk
 ### Added
 
 - Dashboard UI theme for the Home screen, showing the current book cover and reading stats.
@@ -231,8 +248,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - The `Inverted` sleep cover filter now keeps book covers unchanged on Minimal and Dashboard sleep screens while switching the background to white.
 - Rare EPUB open or thumbnail crashes during ZIP decompression are fixed.
 
-## [v1.3.4] - 2026-06-24
-
+## [v1.3.4] - 2026-06-24 — CrossInk
 ### Added
 
 - File Browser now indexes large SD-card folders so directories with many books can be browsed without loading every filename into memory at once.
@@ -273,8 +289,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Firmware updates now follow GitHub asset redirects before streaming the install.
 - Tiled grayscale rendering now serializes display transfers on the shared SPI bus to avoid display glitches during SD activity.
 
-## [v1.3.3] - 2026-06-13
-
+## [v1.3.3] - 2026-06-13 — CrossInk
 ### Added
 
 - `File Browser Display` in `Settings > System > Files & Cache` for choosing one-line or two-line file browser rows across all themes, while preserving Minimal users' existing two-line display on upgrade.
@@ -306,8 +321,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Page Overlay sleep screens no longer force EPUB chapters to re-index after waking.
 - Page Overlay sleep screens now use the current screen as the overlay background outside the reader instead of trying to rebuild a stale book page.
 
-## [v1.3.2] - 2026-06-10
-
+## [v1.3.2] - 2026-06-10 — CrossInk
 ### Added
 
 - Current date in the top-right Settings header on X3 devices.
@@ -338,8 +352,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - SD-card font downloads now use versioned direct S3-hosted HTTP endpoints with CRC validation, avoiding GitHub release redirects and ESP32-C3 TLS stalls when loading the font catalog.
 - EPUB text blocks now keep the book's alignment style when an inline image appears before the text.
 
-## [v1.3.1] - 2026-05-28
-
+## [v1.3.1] - 2026-05-28 — CrossInk
 ### Added
 
 - EPUB reading-position improvements, including bookmark anchors, bookmark preview snippets, and optional chapter/book time-left estimates.
@@ -365,8 +378,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - EPUB text with invisible word-joiner characters no longer shows replacement diamonds for missing font glyphs.
 - Clarified the low-memory EPUB image warning so it says some or all images may be missing.
 
-## [v1.3.0] - 2026-05-21
-
+## [v1.3.0] - 2026-05-21 — CrossInk
 ### Added
 
 - Back/Cancel support while downloading books from OPDS catalogs.
@@ -389,8 +401,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - Modified upstream "page-as-sleep" behavior into a new `Sleep Screen > Quick Resume` option, which also keeps `Quick Resume on Timeout` on, and renamed the timeout-only toggle.
 - Improved reader and browser menu behavior by moving the Footnotes shortcut above Select Chapter, wrapping long book titles in action menus, and reducing progress-screen repaint work during OPDS and SD font downloads.
 
-## [v1.2.11.1] - 2026-05-15
-
+## [v1.2.11.1] - 2026-05-15 — CrossInk
 ### Changed
 
 - Removed Medium font size from `xlarge` build to get it below the size limit
@@ -401,8 +412,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ---
 
-## [v1.2.11] - 2026-05-14
-
+## [v1.2.11] - 2026-05-14 — CrossInk
 ### Added
 
 - New personal theme: "Minimal"
@@ -430,8 +440,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 - In-reader font-size changes now work for SD-card fonts.
 - In-reader SD-card font changes now rebuild the current EPUB page layout consistently.
 
-## [v1.2.10] - 2026-05-11
-
+## [v1.2.10] - 2026-05-11 — CrossInk
 ### Added
 
 - `Recent Books View` setting so the dedicated Recent Books screen can switch between the classic list and a 3x3 cover grid.
@@ -466,8 +475,7 @@ batch of low-memory/reliability improvements — see the `[v1.4.0]` entry below)
 
 ---
 
-## [v1.2.9.1] - 2026-05-03
-
+## [v1.2.9.1] - 2026-05-03 — CrossInk
 ### Changed
 
 - Cleaned up EPUB table rendering by removing synthetic row/cell labels and defaulting table cells to readable left alignment
