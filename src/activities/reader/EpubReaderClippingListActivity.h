@@ -1,5 +1,10 @@
 #pragma once
 
+#include <FreeInkApp.h>
+#include <FreeInkUIGfxRenderer.h>
+
+#include <array>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -10,11 +15,7 @@
 
 class EpubReaderClippingListActivity final : public Activity {
  public:
-  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 std::vector<Clipping> clippings, std::string bookPath = {})
-      : Activity("EpubClippingList", renderer, mappedInput),
-        clippings(std::move(clippings)),
-        bookPath(std::move(bookPath)) {}
+  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
   void onExit() override;
@@ -22,8 +23,6 @@ class EpubReaderClippingListActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  std::vector<Clipping> clippings;
-  std::string bookPath;
   std::string detailText;
   // Wrapped quote lines, with the note (if any) appended directly after —
   // one continuous paginated flow.
@@ -35,8 +34,23 @@ class EpubReaderClippingListActivity final : public Activity {
   int detailLinesPerPage = 0;
   bool longPressConfirmHandled = false;
   bool detailMode = false;
+  using UiApp = freeink::ui::FreeInkApp<20, 4>;
+  freeink::ui::GfxRendererTarget uiTarget;
+  UiApp app;
+  std::atomic<bool> uiReady{false};
+  int visibleRows = 1;
+  int topIndex = 0;
+  int listTop = 0;
+  int listBottom = 0;
+  int listRowHeight = 0;
+  int listRowStep = 0;
+  std::vector<freeink::ui::ListItem> uiItems;
+  std::array<std::string, 20> uiRawText;
+  std::array<std::string, 20> uiLabels;
 
-  int getPageItems() const;
+  static void listScreen(UiApp::ScreenType& screen, void* user);
+  static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
+  void buildListScreen(UiApp::ScreenType& screen);
   int getDetailTextWidth() const;
   int getDetailLinesPerPage() const;
   int getDetailPageCount() const;

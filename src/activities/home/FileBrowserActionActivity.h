@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "../Activity.h"
-#include "util/ButtonNavigator.h"
+#include "components/OptionPopup.h"
 
 enum class FileBrowserAction : int {
   Delete = 0,
@@ -24,9 +24,10 @@ enum class FileBrowserAction : int {
   DeleteClippings = 12,
   EpubRenderMode = 13,
   ResetReaderSettings = 14,
-  EditNote = 15,      // CrossInk Notes — edit a clipping's note on-device
-  OpenClipping = 16,  // CrossInk Notes — jump to a clipping's location in the book
-  EditTag = 17,       // CrossInk Notes — change a clipping's tag on-device
+  SendNearby = 15,
+  EditNote = 16,      // CrossInk Notes — edit a clipping's note on-device
+  OpenClipping = 17,  // CrossInk Notes — jump to a clipping's location in the book
+  EditTag = 18,       // CrossInk Notes — change a clipping's tag on-device
 };
 
 class FileBrowserActionActivity final : public Activity {
@@ -37,20 +38,20 @@ class FileBrowserActionActivity final : public Activity {
   };
 
   FileBrowserActionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title,
-                            std::vector<MenuItem> items, bool ignoreInitialConfirmRelease = false)
-      : Activity("FileBrowserAction", renderer, mappedInput),
-        title(std::move(title)),
-        items(std::move(items)),
-        ignoreConfirmRelease(ignoreInitialConfirmRelease) {}
+                            std::vector<MenuItem> items, bool ignoreInitialConfirmRelease = false);
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
-  ButtonNavigator buttonNavigator;
+  void finishCancelled();
+
   std::string title;
   std::vector<MenuItem> items;
-  int selectedIndex = 0;
+  std::vector<std::string> optionLabels;
+  OptionPopup optionPopup;
   bool ignoreConfirmRelease = false;
+  bool ignoreTouchRelease = false;
+  bool selectionMade = false;
 };

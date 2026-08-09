@@ -1,10 +1,12 @@
 """
 PlatformIO pre-build script: inject git info into version defines.
 
-  default:       1.1.0-dev+<branch>
+  default:       1.1.0-dev+<branch>  (local development builds)
+  production:    1.1.0               (when $CROSSINK_RELEASE_VERSION is set)
+  default RC:    1.1.0-rc+<hash>       (when $CROSSINK_RC_HASH is set)
   test & debug:          1.2.6-<branch>+<5-char-hash>
-  gh_release_rc: 1.1.0-rc+<5-char-hash>   (hash from $CROSSPOINT_RC_HASH in
-                                             CI, or from git locally)
+  gh_release_rc: 1.1.0-rc+<hash>       (hash from $CROSSINK_RC_HASH in CI,
+                                        or from git locally)
 
 All other environments set CROSSINK_VERSION directly in platformio.ini.
 """
@@ -88,28 +90,41 @@ def get_git_short_sha(project_dir):
 
 def _read_ini(project_dir):
     ini_path = os.path.join(project_dir, 'platformio.ini')
+    local_ini_path = os.path.join(project_dir, 'platformio.local.ini')
     config = configparser.ConfigParser()
     if os.path.isfile(ini_path):
-        config.read(ini_path)
+        config_paths = [ini_path]
+        if os.path.isfile(local_ini_path):
+            # Match PlatformIO's local override convention: values from the
+            # optional local file take precedence over the tracked config.
+            config_paths.append(local_ini_path)
+        config.read(config_paths)
     else:
         warn(f'platformio.ini not found at {ini_path}')
     return config
 
 
-def get_base_version(project_dir):
-    config = _read_ini(project_dir)
-    if not config.has_option('crosspoint', 'version'):
-        warn('No [crosspoint] version in platformio.ini; base version will be "0.0.0"')
-        return '0.0.0'
-    return config.get('crosspoint', 'version')
-
-
 def get_crossink_version(project_dir):
     config = _read_ini(project_dir)
-    if not config.has_option('crosspoint', 'crossink_version'):
-        warn('No [crosspoint] crossink_version in platformio.ini; falling back to version')
-        return get_base_version(project_dir)
-    return config.get('crosspoint', 'crossink_version')
+    if not config.has_option('crossink', 'version'):
+        warn(
+            'No [crossink] version in platformio.ini or platformio.local.ini; '
+            'build version will be "0.0.0"'
+        )
+        return '0.0.0'
+    return config.get('crossink', 'version')
+
+
+def get_release_candidate_version(project_dir):
+    short_hash = os.environ.get('CROSSINK_RC_HASH') or get_git_short_hash(project_dir)
+    return f'{get_crossink_version(project_dir)}-rc+{sanitize_version_component(short_hash)}'
+
+
+def get_production_version(project_dir):
+    release_version = os.environ.get('CROSSINK_RELEASE_VERSION')
+    if release_version:
+        return sanitize_version_component(release_version.lstrip('v'))
+    return get_crossink_version(project_dir)
 
 
 def inject_version(env):
@@ -117,13 +132,32 @@ def inject_version(env):
     pioenv = env['PIOENV']
 
     if pioenv == 'default':
-        base_version = get_crossink_version(project_dir)
-        branch = get_git_branch(project_dir)
-        version_string = f'{base_version}-dev+{branch}'
+        if os.environ.get('CROSSINK_RC_HASH'):
+            version_string = get_release_candidate_version(project_dir)
+            print(f'CrossInk RC build version: {version_string}')
+        elif os.environ.get('CROSSINK_RELEASE_VERSION'):
+            version_string = get_production_version(project_dir)
+            print(f'CrossInk production build version: {version_string}')
+        else:
+            base_version = get_crossink_version(project_dir)
+            branch = get_git_branch(project_dir)
+            version_string = f'{base_version}-dev+{branch}'
+            print(f'CrossInk build version: {version_string}')
         env.Append(CPPDEFINES=[('CROSSINK_VERSION', f'\\"{version_string}\\"')])
-        print(f'CrossInk build version: {version_string}')
 
     elif pioenv == 'debug':
+        branch = get_git_branch(project_dir)
+        short_hash = get_git_short_hash(project_dir)
+        ci_version = get_crossink_version(project_dir)
+        suffix = f'-{branch}+{short_hash}'
+        env.Append(CPPDEFINES=[
+            ('CROSSINK_VERSION', f'\\"{ci_version}{suffix}\\"'),
+            ('CROSSINK_BUILD_ENV', '\\"debug\\"'),
+            'CROSSINK_SHOW_SLEEP_BUILD_INFO',
+        ])
+        print(f'CrossInk test build version: {ci_version}{suffix}')
+
+    elif pioenv == 'sticky-debug':
         branch = get_git_branch(project_dir)
         short_hash = get_git_short_hash(project_dir)
         ci_version = get_crossink_version(project_dir)
@@ -146,14 +180,12 @@ def inject_version(env):
         print(f'CrossInk test build version: {ci_version}{suffix}')
 
     elif pioenv == 'gh_release_rc':
-        # CI passes CROSSPOINT_RC_HASH as an env var; locally we derive it from git.
-        short_hash = os.environ.get('CROSSPOINT_RC_HASH') or get_git_short_hash(project_dir)
-        ci_version = get_crossink_version(project_dir)
-        rc_suffix = f'-rc+{short_hash}'
+        # CI passes CROSSINK_RC_HASH as an env var; locally we derive it from git.
+        version_string = get_release_candidate_version(project_dir)
         env.Append(CPPDEFINES=[
-            ('CROSSINK_VERSION', f'\\"{ci_version}{rc_suffix}\\"'),
+            ('CROSSINK_VERSION', f'\\"{version_string}\\"'),
         ])
-        print(f'CrossInk RC build version: {ci_version}{rc_suffix}')
+        print(f'CrossInk RC build version: {version_string}')
 
 
 # PlatformIO/SCons entry point — Import and env are SCons builtins injected at runtime.

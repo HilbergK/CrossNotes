@@ -48,6 +48,10 @@ struct PageResult {
 struct ProgressChangeResult {
   int spineIndex = 0;
   int page = 0;
+  int totalPages = 0;
+  std::string xpath;
+  float percentage = 0.0f;
+  bool hasSavedProgress = false;
 };
 
 struct SyncResult {
@@ -77,6 +81,10 @@ struct FileBrowserActionResult {
 
 struct FilePathResult {
   std::string path;
+};
+
+struct WordResult {
+  std::string word;
 };
 
 struct ReadingStatsResult {
@@ -119,7 +127,8 @@ struct TagResult {
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
                                    IntervalResult, OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult,
                                    NetworkModeResult, FootnoteResult, BookmarkResult, FileBrowserActionResult,
-                                   FilePathResult, ReadingStatsResult, ClippingResult, ClippingJumpResult, TagResult>;
+                                   FilePathResult, WordResult, ReadingStatsResult, ClippingResult, ClippingJumpResult,
+                                   TagResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
