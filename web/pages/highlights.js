@@ -15,7 +15,7 @@ function noteId(h) {
   return `note_${h.spineIndex}_${h.startPage}_${h.startWordIndex}`;
 }
 
-// ── Tabs (Session 8) ─────────────────────────────────────────────────────────
+// ── Tabs ────────────────────────────────────────────────────────────────────
 function switchTab(tabName, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
@@ -28,7 +28,7 @@ function switchTab(tabName, btn) {
   }
 }
 
-// ── Screenshots (Session 8) ──────────────────────────────────────────────────
+// ── Screenshots ─────────────────────────────────────────────────────────────
 // Reader screenshots are saved per-book under /screenshots/<BookTitle>/, while
 // home/menu screenshots land flat in /screenshots/. Recurse one level so both show up.
 async function scanScreenshots(dirPath, depth = 0) {
@@ -181,8 +181,14 @@ async function selectBook(path) {
     const res = await fetch('/api/highlights?path=' + encodeURIComponent(path));
     if (!res.ok) throw new Error('Failed to load highlights');
     const highlights = await res.json();
+    // A slower response for a previously selected book must not replace the
+    // current one — saves address the device by currentBookPath plus an index
+    // into currentHighlights, so a mismatch would write to the wrong book.
+    if (currentBookPath !== path) return;
+    highlights.forEach((h, i) => { h._idx = i; });
     currentHighlights = highlights;
-    renderHighlights(highlights);
+    resetFilters();
+    applyFilters();
   } catch (e) {
     highlightsContainer.innerHTML = '<p class="empty-hint" style="color:var(--danger-color);">Could not load highlights for this book.</p>';
     console.error(e);
@@ -202,10 +208,19 @@ function exportNotes() {
     return;
   }
 
+  captureUnsavedEdits();  // export what is on screen, including text not yet saved
   const title = currentBookTitle();
+  const shown = filteredHighlights();
+  if (shown.length === 0) {
+    showMessage('No highlights match the current filter.', 'error');
+    return;
+  }
   const lines = [`# ${title}`, ''];
+  if (shown.length !== currentHighlights.length) {
+    lines.push(`_${shown.length} of ${currentHighlights.length} highlights (filtered)_`, '');
+  }
 
-  currentHighlights.forEach(h => {
+  shown.forEach(h => {
     const chapter = h.chapterTitle || 'Unknown Chapter';
     const tag = (h.note && h.note.tag) ? ` (${h.note.tag})` : '';
     lines.push(`## ${chapter}${tag}`);
@@ -252,7 +267,11 @@ function renderHighlights(highlights) {
     return;
   }
 
-  highlights.forEach((h, idx) => {
+  highlights.forEach((h) => {
+    // Cards are keyed by the highlight's index in currentHighlights, not by its
+    // position in the filtered view — save/clear/delete all address the store by
+    // that index, so filtering must not renumber them.
+    const idx = (h._idx !== undefined) ? h._idx : currentHighlights.indexOf(h);
     const card = document.createElement('div');
     card.className = 'highlight-card';
     card.id = 'card_' + idx;
@@ -281,14 +300,148 @@ function renderHighlights(highlights) {
         rows="3"
       >${escapeHtml(noteText)}</textarea>
       <div class="note-actions">
+        <span class="copy-group" id="copy_${idx}">
+          <span class="copy-label">Copy</span>
+          <button class="btn-copy" onclick="copyHighlight(${idx}, 'quote')">highlight</button>
+          ${noteText ? `<button class="btn-copy" onclick="copyHighlight(${idx}, 'note')">note</button>
+          <button class="btn-copy" onclick="copyHighlight(${idx}, 'both')">both</button>` : ''}
+        </span>
         <span class="save-status" id="status_${idx}">Saved</span>
-        <button class="btn-delete-note" onclick="deleteNoteConfirm(${idx})">Delete</button>
+        <button class="btn-delete-note" onclick="deleteNoteConfirm(${idx})">Delete note</button>
         <button class="btn-clear-note" onclick="clearNote(${idx})">Clear</button>
         <button class="btn-save-note" onclick="saveNote(${idx})">Save Note</button>
       </div>
     `;
     container.appendChild(card);
   });
+}
+
+// ── Search / filter ──────────────────────────────────────────────────────────
+// Filtering is display-only: currentHighlights is never reordered or trimmed, so
+// every card keeps addressing the device by its original index.
+function resetFilters() {
+  const search = document.getElementById('highlight-search');
+  const tag = document.getElementById('highlight-tag-filter');
+  if (search) search.value = '';
+  if (tag) tag.value = '';
+  populateTagFilter();
+}
+
+// Only offer tags this book actually uses, so the dropdown stays short.
+function populateTagFilter() {
+  const sel = document.getElementById('highlight-tag-filter');
+  if (!sel) return;
+  const used = [];
+  currentHighlights.forEach(h => {
+    const t = (h.note && h.note.tag) ? h.note.tag : '';
+    if (t && used.indexOf(t) === -1) used.push(t);
+  });
+  used.sort();
+  const keep = sel.value;
+  sel.innerHTML =
+    '<option value="">All tags</option>' +
+    '<option value="*any">Any tag</option>' +
+    '<option value="*none">Untagged</option>' +
+    used.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  sel.value = keep;
+  if (sel.selectedIndex < 0) sel.value = '';
+}
+
+// Re-rendering rebuilds each card from the last saved note text, so anything
+// typed but not yet saved would be lost. Carry live textarea contents back into
+// currentHighlights first — the value stays on screen, and the card's Save
+// button still controls what reaches the device.
+function captureUnsavedEdits() {
+  currentHighlights.forEach((h, i) => {
+    const ta = document.getElementById(noteId(h));
+    if (!ta) return;
+    const typed = ta.value;
+    const saved = (h.note && h.note.text) ? h.note.text : '';
+    if (typed !== saved) {
+      if (!h.note) h.note = {};
+      h.note.text = typed;
+      h.note.unsaved = true;
+    }
+  });
+}
+
+// The highlights currently passing the search box and tag filter. Export uses
+// this too, so what you download matches what you are looking at.
+function filteredHighlights() {
+  const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
+  const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
+
+  return currentHighlights.filter(h => {
+    const tag = (h.note && h.note.tag) ? h.note.tag : '';
+    if (tagSel === '*any' && !tag) return false;
+    if (tagSel === '*none' && tag) return false;
+    if (tagSel && tagSel !== '*any' && tagSel !== '*none' && tag !== tagSel) return false;
+
+    if (!q) return true;
+    const note = (h.note && h.note.text) ? h.note.text : '';
+    return (h.text || '').toLowerCase().includes(q) ||
+           note.toLowerCase().includes(q) ||
+           (h.chapterTitle || '').toLowerCase().includes(q);
+  });
+}
+
+function applyFilters() {
+  captureUnsavedEdits();
+  const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
+  const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
+  const shown = filteredHighlights();
+
+  const count = document.getElementById('filter-count');
+  if (count) {
+    const filtering = q || tagSel;
+    count.textContent = filtering ? `${shown.length} of ${currentHighlights.length}` : '';
+  }
+
+  if (shown.length === 0 && currentHighlights.length > 0) {
+    document.getElementById('highlights-container').innerHTML =
+      '<p class="empty-hint">No highlights match this search.</p>';
+    return;
+  }
+  renderHighlights(shown);
+}
+
+// ── Copy ─────────────────────────────────────────────────────────────────────
+async function copyToClipboard(text, label) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // The portal is served over plain HTTP, where the async clipboard API is
+      // unavailable; fall back to a hidden textarea + execCommand.
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      try {
+        ta.select();
+        document.execCommand('copy');
+      } finally {
+        // execCommand is deprecated and throws in some browsers; without this
+        // the hidden textarea would stay in the DOM.
+        document.body.removeChild(ta);
+      }
+    }
+    showMessage(label + ' copied', 'success');
+  } catch (e) {
+    showMessage('Could not copy — your browser blocked it.', 'error');
+  }
+}
+
+function copyHighlight(idx, what) {
+  const h = currentHighlights[idx];
+  if (!h) return;
+  const quote = h.text || '';
+  const note = (h.note && h.note.text) ? h.note.text : '';
+  if (what === 'quote') return copyToClipboard(quote, 'Highlight');
+  if (what === 'note') return copyToClipboard(note, 'Note');
+  return copyToClipboard(note ? quote + '\n\n' + note : quote, 'Highlight and note');
 }
 
 // ── Save note (and tag) ─────────────────────────────────────────────────────
@@ -300,6 +453,10 @@ async function saveNote(idx) {
   const btn = textarea.closest('.highlight-card').querySelector('.btn-save-note');
 
   const tagValue = tagSelect ? tagSelect.value : '';
+  // Read the text once, here. Reading it again after the await would record
+  // whatever the user has typed since — text the device was never sent — and
+  // then flash "Saved" over it.
+  const noteText = textarea.value.trim();
 
   btn.disabled = true;
   try {
@@ -312,7 +469,7 @@ async function saveNote(idx) {
         startPage: h.startPage,
         startWordIndex: h.startWordIndex,
         timestamp: h.timestamp,
-        text: textarea.value.trim(),
+        text: noteText,
         tag: tagValue
       })
     });
@@ -322,8 +479,10 @@ async function saveNote(idx) {
     if (!currentHighlights[idx].note) {
       currentHighlights[idx].note = {};
     }
-    currentHighlights[idx].note.text = textarea.value.trim();
+    currentHighlights[idx].note.text = noteText;
     currentHighlights[idx].note.tag = tagValue;
+
+    populateTagFilter();  // a tag may have just appeared or disappeared
 
     const badgeEl = document.getElementById('tagbadge_' + idx);
     if (badgeEl) {

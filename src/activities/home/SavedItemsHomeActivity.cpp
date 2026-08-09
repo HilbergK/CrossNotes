@@ -22,12 +22,14 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "fontIds.h"
 
 namespace fui = freeink::ui;
 
 namespace {
 constexpr unsigned long SAVED_ITEM_DELETE_HOLD_MS = 1000;
 constexpr fui::ActionId ACTION_ROW = 1;
+constexpr const char* SAVED_ITEMS_TITLE = "Notes and Bookmarks";
 
 void mergeBookmarkEntry(std::vector<SavedBookEntry>& out, const BookmarkedBookEntry& entry) {
   auto it = std::find_if(out.begin(), out.end(), [&](const SavedBookEntry& existing) {
@@ -64,6 +66,13 @@ SavedItemsHomeActivity::SavedItemsHomeActivity(GfxRenderer& renderer, MappedInpu
       app(uiTarget, uiTarget.deviceContext()) {}
 
 void SavedItemsHomeActivity::reloadSavedBooks() {
+  // Which book is selected, by path. The order below depends on counts, so
+  // deleting notes or bookmarks can move a book — and this runs on every return
+  // from a sub-screen. Without this the selection would stay on a row number and
+  // silently end up on a different book than the one the user was on.
+  const std::string wasSelected = (selectedIndex >= 0 && selectedIndex < static_cast<int>(books.size()))
+                                      ? books[static_cast<size_t>(selectedIndex)].bookPath
+                                      : std::string();
   books.clear();
 
   std::vector<BookmarkedBookEntry> bookmarkedBooks;
@@ -79,11 +88,79 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
     mergeClippingEntry(books, entry);
   }
 
+  // CrossInk Notes: a stored title can be blank (an upstream finished-book move
+  // can blank it — see CHANGELOG v1.1.1), which would render an invisible row.
+  // Fall back to the file name so the entry is always readable. Done here rather
+  // than at draw time so menus and headers get the same name.
+  for (auto& b : books) {
+    if (!b.bookTitle.empty()) continue;
+    const std::string& p = b.bookPath;
+    const size_t slash = p.find_last_of('/');
+    std::string name = (slash == std::string::npos) ? p : p.substr(slash + 1);
+    const size_t dot = name.find_last_of('.');
+    if (dot != std::string::npos) name = name.substr(0, dot);
+    b.bookTitle = name.empty() ? p : name;
+  }
+
+  // CrossInk Notes: show what each book actually holds. Highlight and bookmark
+  // counts come free with the entries; the note count needs that book's notes
+  // file, read once here rather than per frame.
+  for (auto& b : books) {
+    // Only for books that still have highlights. A note is only ever shown
+    // beside its clipping, so counting notes for a book with none advertises
+    // something the user has no way to open — openSavedItems() routes on
+    // bookmarks and clippings alone. It also skips a file read and a full JSON
+    // parse for every bookmark-only book, which is most of the cost here.
+    b.noteCount = b.clippingCount > 0 ? NoteStore::countForFilePath(b.bookPath) : 0;
+    // The author has its own line now, so this holds the counts alone.
+    b.subtitle.clear();
+    const auto append = [&b](const std::string& part) {
+      if (!b.subtitle.empty()) b.subtitle += "  -  ";
+      b.subtitle += part;
+    };
+    if (b.clippingCount > 0) {
+      append(std::to_string(b.clippingCount) + (b.clippingCount == 1 ? " highlight" : " highlights"));
+    }
+    if (b.noteCount > 0) {
+      append(std::to_string(b.noteCount) + (b.noteCount == 1 ? " note" : " notes"));
+    }
+    if (b.bookmarkCount > 0) {
+      append(std::to_string(b.bookmarkCount) + (b.bookmarkCount == 1 ? " bookmark" : " bookmarks"));
+    }
+  }
+
+  // Most-annotated first. Notes count on top of their highlight rather than
+  // instead of it: a book where most highlights carry a note represents more
+  // work than one with the same highlights and none, and should rank above it.
+  // Title breaks ties so the order is deterministic — otherwise books with
+  // equal counts would fall back to SD directory order and shuffle between
+  // visits.
+  std::sort(books.begin(), books.end(), [](const SavedBookEntry& a, const SavedBookEntry& b) {
+    const int aTotal = a.clippingCount + a.noteCount + a.bookmarkCount;
+    const int bTotal = b.clippingCount + b.noteCount + b.bookmarkCount;
+    if (aTotal != bTotal) return aTotal > bTotal;
+    return a.bookTitle < b.bookTitle;
+  });
+
+  if (!wasSelected.empty()) {
+    const auto it = std::find_if(books.begin(), books.end(),
+                                 [&wasSelected](const SavedBookEntry& b) { return b.bookPath == wasSelected; });
+    if (it != books.end()) selectedIndex = static_cast<int>(std::distance(books.begin(), it));
+  }
+
   if (books.empty()) {
     selectedIndex = 0;
   } else if (selectedIndex >= static_cast<int>(books.size())) {
     selectedIndex = static_cast<int>(books.size()) - 1;
   }
+
+  // Bring the window to wherever the selection ended up. buildListScreen only
+  // clamps topIndex into range, so a selection that moved rows during the sort
+  // above could land outside the visible window — and render() draws the
+  // highlight only when it is inside, so the list would look like nothing was
+  // selected at all. The clipping list already does this after its own
+  // rebuilds; this screen was the one that did not.
+  topIndex = followListSelection(selectedIndex, topIndex, visibleRows, static_cast<int>(books.size()));
 }
 
 void SavedItemsHomeActivity::onEnter() {
@@ -204,7 +281,9 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (books.empty()) {
-    screen.centeredText(tr(STR_NO_BOOKMARKS), screen.theme().bodyText);
+    // This screen aggregates highlights, notes AND bookmarks, so the
+    // bookmarks-only wording undersold it on a first run.
+    screen.centeredText(tr(STR_NO_SAVED_ITEMS), screen.theme().bodyText);
     return;
   }
   std::vector<fui::ListItem> items;
@@ -227,26 +306,54 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
   const fui::Rect bounds = screen.body();
   listTop = bounds.y;
   listBottom = bounds.bottom();
-  const auto rows = configureUiList(props, screen.theme(), bounds, UiListRowType::WithSubtitle);
+  // CrossInk Notes: three-line rows (title / author / counts) — see
+  // NotesListLayout for why the third line lives in the row gap and why the
+  // selection is inverted rather than painted by the widget.
+  const auto rows = notesLayout.configure(props, uiTarget, screen.theme(), bounds, renderer, mappedInput,
+                                          static_cast<int>(books.size()));
   listRowHeight = props.rowHeight;
   listRowStep = props.rowHeight + props.rowGap;
   visibleRows = rows > 0 ? rows : 1;
   topIndex = scrollListBy(topIndex, 0, visibleRows, static_cast<int>(books.size()));
   props.topIndex = static_cast<uint16_t>(topIndex);
+
+  const int end = std::min(static_cast<int>(books.size()), topIndex + visibleRows);
+  for (int i = topIndex; i < end; ++i) {
+    const size_t slot = static_cast<size_t>(i - topIndex);
+    if (slot >= uiCounts.size()) break;
+    uiCounts[slot] = books[static_cast<size_t>(i)].subtitle;
+  }
+
   screen.list(props);
 }
 
 void SavedItemsHomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
+  // CrossInk Notes: this screen lists notes/tags alongside bookmarks, so it
+  // keeps the CrossNotes name rather than upstream's "Bookmarks and Clippings".
   if (mappedInput.hasTouchHardware()) {
-    TouchHeaderBackButton::drawCompact(renderer, "Notes and Bookmarks");
+    TouchHeaderBackButton::drawCompact(renderer, SAVED_ITEMS_TITLE);
   } else {
-    CompactHeader::drawTitle(renderer, "Notes and Bookmarks");
+    CompactHeader::drawTitle(renderer, SAVED_ITEMS_TITLE);
   }
   uiReady = false;
   app.render();
   uiReady = true;
+
+  // CrossInk Notes: counts line, then the selection over the whole entry.
+  if (notesLayout.ready()) {
+    const int total = static_cast<int>(books.size());
+    const int end = std::min(total, topIndex + visibleRows);
+    for (int i = topIndex; i < end; ++i) {
+      const size_t slot = static_cast<size_t>(i - topIndex);
+      if (slot >= uiCounts.size()) break;
+      notesLayout.drawThirdLine(renderer, static_cast<int>(slot), uiCounts[slot]);
+    }
+    if (selectedIndex >= topIndex && selectedIndex < end) {
+      notesLayout.drawSelection(renderer, selectedIndex - topIndex);
+    }
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -341,13 +448,33 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
               });
               return;
             }
-            case FileBrowserAction::DeleteClippings:
-              CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
-              CLIPPINGS.clearAll();
-              // CrossInk Notes: clearing a book's clippings also clears its notes/tags,
-              // since notes anchor to clippings that no longer exist.
-              NoteStore::deleteForFilePath(entry.bookPath);
-              break;
+            case FileBrowserAction::DeleteClippings: {
+              // Confirm, as Delete Bookmarks directly above already does. This
+              // erases every highlight AND every note for the book, so it is the
+              // most destructive action on this screen — it should not be the
+              // only one that acts on a single press.
+              auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(
+                  renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE_CLIPPINGS),
+                  entry.bookTitle);
+              if (!confirmation) {
+                LOG_ERR("SVA", "OOM: clipping clear ConfirmationActivity");
+                reloadSavedBooks();
+                requestUpdate();
+                return;
+              }
+              startActivityForResult(std::move(confirmation), [this, entry](const ActivityResult& confirmation) {
+                if (!confirmation.isCancelled) {
+                  CLIPPINGS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
+                  CLIPPINGS.clearAll();
+                  // CrossInk Notes: clearing a book's clippings also clears its
+                  // notes/tags, since notes anchor to clippings that are gone.
+                  NoteStore::deleteForFilePath(entry.bookPath);
+                }
+                reloadSavedBooks();
+                requestUpdate();
+              });
+              return;
+            }
             default:
               break;
           }

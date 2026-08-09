@@ -25,9 +25,11 @@ enum class FileBrowserAction : int {
   EpubRenderMode = 13,
   ResetReaderSettings = 14,
   SendNearby = 15,
-  EditNote = 16,      // CrossInk Notes — edit a clipping's note on-device
-  OpenClipping = 17,  // CrossInk Notes — jump to a clipping's location in the book
-  EditTag = 18,       // CrossInk Notes — change a clipping's tag on-device
+  EditNote = 16,       // CrossInk Notes — edit a clipping's note on-device
+  OpenClipping = 17,   // CrossInk Notes — jump to a clipping's location in the book
+  EditTag = 18,        // CrossInk Notes — change a clipping's tag on-device
+  FilterTag = 19,      // CrossInk Notes — show only clippings with a chosen tag
+  SortClippings = 20,  // CrossInk Notes — order the clipping list
 };
 
 class FileBrowserActionActivity final : public Activity {

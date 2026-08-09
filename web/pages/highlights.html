@@ -19,6 +19,20 @@
         <p class="empty-hint">Select a book to view its highlights.</p>
       </div>
       <div id="highlights-toolbar" style="display:none;">
+        <input
+          type="search"
+          id="highlight-search"
+          class="highlight-search"
+          placeholder="Search highlights and notes…"
+          oninput="applyFilters()"
+          aria-label="Search highlights and notes"
+        />
+        <select id="highlight-tag-filter" class="tag-filter" onchange="applyFilters()" aria-label="Filter by tag">
+          <option value="">All tags</option>
+          <option value="*any">Any tag</option>
+          <option value="*none">Untagged</option>
+        </select>
+        <span id="filter-count" class="filter-count"></span>
         <button class="btn-export-notes" onclick="exportNotes()">Export Notes</button>
       </div>
       <div id="highlights-container" style="display:none;"></div>

@@ -7,7 +7,23 @@
 
 inline constexpr size_t CLIPPING_CHAPTER_TITLE_MAX = 48;
 // CrossInk Notes: 1024 (upstream 512) ≈ 150-180 words per highlight, so long
-// passages are not truncated.
+// passages are not truncated. Since v1.5.0 clipping text lives outside the
+// record (textOffset/textLength) and is read on demand, so a larger cap no
+// longer costs resident RAM per clipping.
+//
+// Known, accepted one-way incompatibility. readFromFile() below rejects the
+// WHOLE file if any record's textLength exceeds this cap, so a highlight over
+// 512 characters written here cannot be read by stock CrossInk/CrossPoint:
+// that book reads as having no clippings, and the next highlight made there
+// rewrites the file with only that one — destroying the rest. Back in
+// CrossNotes, pruneMissing() then drops the now-orphaned notes too.
+//
+// Judged not worth fixing: it needs a >512-character highlight AND a switch
+// back to stock firmware AND a new highlight made there, and the damage is
+// confined to that one book. The fix, if it is ever wanted, is to write 512
+// here (enough to locate the passage) and keep the full text in the notes
+// file we own — see NoteStore, which already has the binding and the
+// delete/move/prune hooks for it.
 inline constexpr size_t CLIPPING_TEXT_MAX = 1024;
 inline constexpr uint16_t CLIPPING_MAX_PER_BOOK = 256;
 inline constexpr uint16_t CLIPPING_MAX_PAGE_MATCHES = 16;

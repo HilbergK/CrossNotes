@@ -69,7 +69,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [default, sticky]
+        # CrossNotes is an Xteink X4/X3 firmware only. Upstream builds the
+        # Seeed Studio Sticky here too; that device is out of scope for this
+        # fork, so its build is not a signal we act on.
+        environment: [default]
     steps:
       - uses: actions/checkout@v6
         with:

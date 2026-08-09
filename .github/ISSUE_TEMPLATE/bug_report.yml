@@ -64,6 +64,7 @@ body:
     attributes:
       label: Describe the Bug
       description: A clear and concise description of what the bug is.
+      placeholder: |
     validations:
       required: true
 

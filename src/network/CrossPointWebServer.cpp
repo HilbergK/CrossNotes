@@ -2209,6 +2209,10 @@ void CrossPointWebServer::handleGetHighlights() const {
     String output;
     serializeJson(doc, output);
 
+    // No watchdog feeding here: as of CrossInk v1.5.0-rc-3 the serving task is
+    // deliberately not subscribed to the task watchdog, because the WebServer's
+    // own multi-second client waits could consume the whole window on a weak
+    // link while the CPU was perfectly healthy. Resets would be no-ops.
     if (seenFirst) {
       server->sendContent(",");
     } else {
@@ -2233,6 +2237,18 @@ void CrossPointWebServer::handlePostNote() {
   }
 
   const String body = server->arg("plain");
+  // Reject an oversized body before parsing. Past this point the payload exists
+  // two or three times over — the raw String, the JsonDocument's pool, and the
+  // std::string copy below — and NoteStore only truncates to kNoteTextMax after
+  // all of that, so a large paste into the note box (a whole chapter, say) could
+  // exhaust the heap and reboot the device. Generous against kNoteTextMax so a
+  // legitimate long note is never refused.
+  constexpr size_t MAX_NOTE_BODY_BYTES = NoteStore::kNoteTextMax + 1024;
+  if (body.length() > MAX_NOTE_BODY_BYTES) {
+    server->send(413, "text/plain", "Note too long");
+    return;
+  }
+
   JsonDocument doc;
   const DeserializationError err = deserializeJson(doc, body);
   if (err) {
@@ -2263,19 +2279,28 @@ void CrossPointWebServer::handlePostNote() {
   NOTES.loadForBook(path.c_str(), "epub");
 
   const bool tagWillBeEmpty = !hasTag || tagStr.empty();
+  bool ok = false;
   if (text.empty() && tagWillBeEmpty) {
-    NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
+    ok = NOTES.deleteNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp);
   } else {
     // Always write text (even "") so an intentionally-cleared note body is
-    // actually blanked rather than left stale; saveNote preserves the tag.
-    NOTES.saveNote(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str());
-    if (hasTag) {
-      NOTES.saveTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp,
-                    tagStr.empty() ? 0 : tagStr[0]);
-    }
+    // actually blanked rather than left stale. applyTag is false when the
+    // client sent no "tag" key, which leaves any existing tag alone.
+    ok = NOTES.saveNoteAndTag(path.c_str(), spineIndex, startPage, startWordIndex, clippingTimestamp, text.c_str(),
+                              tagStr.empty() ? 0 : tagStr[0], hasTag);
   }
 
   NOTES.unload();
+
+  // The device-side paths already report a refused write; this one answered
+  // 200 regardless. That matters more now the store declines to overwrite a
+  // notes file it could not read — those saves are a guaranteed no-op, and the
+  // browser would have gone on showing "Saved" for every one of them.
+  if (!ok) {
+    server->send(500, "text/plain", "Could not save note");
+    LOG_ERR("WEB", "Note save failed for path: %s", path.c_str());
+    return;
+  }
 
   server->send(200, "text/plain", "OK");
   LOG_DBG("WEB", "Saved note for path: %s", path.c_str());

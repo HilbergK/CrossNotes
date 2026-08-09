@@ -124,11 +124,11 @@ struct TagResult {
   std::string noteText = {};  // note typed on-device via "Write a note..." (empty = none)
 };
 
-using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   IntervalResult, OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult,
-                                   NetworkModeResult, FootnoteResult, BookmarkResult, FileBrowserActionResult,
-                                   FilePathResult, WordResult, ReadingStatsResult, ClippingResult, ClippingJumpResult,
-                                   TagResult>;
+using ResultVariant =
+    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
+                 OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult, NetworkModeResult, FootnoteResult,
+                 BookmarkResult, FileBrowserActionResult, FilePathResult, WordResult, ReadingStatsResult,
+                 ClippingResult, ClippingJumpResult, TagResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

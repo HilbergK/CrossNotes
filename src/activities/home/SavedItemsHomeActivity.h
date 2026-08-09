@@ -3,11 +3,13 @@
 #include <FreeInkApp.h>
 #include <FreeInkUIGfxRenderer.h>
 
+#include <array>
 #include <atomic>
 #include <string>
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/NotesListLayout.h"
 #include "util/ButtonNavigator.h"
 
 struct SavedBookEntry {
@@ -17,6 +19,11 @@ struct SavedBookEntry {
   std::string bookType;
   uint16_t bookmarkCount = 0;
   uint16_t clippingCount = 0;
+  // CrossInk Notes: notes carrying a tag or text, and the composed row subtitle
+  // ("12 highlights - 5 notes"). The subtitle lives here because
+  // fui::ListItem::subtitle borrows a const char*.
+  uint16_t noteCount = 0;
+  std::string subtitle;
 };
 
 class SavedItemsHomeActivity final : public Activity {
@@ -39,6 +46,12 @@ class SavedItemsHomeActivity final : public Activity {
   std::atomic<bool> uiReady{false};
   int visibleRows = 1;
   int topIndex = 0;
+  // CrossInk Notes: counts get their own third line, drawn in the row gap, so a
+  // long author can no longer truncate them away. Geometry is resolved from the
+  // theme in buildListScreen() and used by render().
+  std::array<std::string, 20> uiCounts;
+  crossnotes::NotesListLayout notesLayout;
+
   int listTop = 0;
   int listBottom = 0;
   int listRowHeight = 0;

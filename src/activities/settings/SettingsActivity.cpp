@@ -149,7 +149,10 @@ std::string formatCompactDuration(const uint32_t seconds) {
 
 void drawSystemVersionFooter(const GfxRenderer& renderer, const int pageWidth, const int pageHeight,
                              const ThemeMetrics& metrics) {
-  const std::string label = "CrossInk " CROSSINK_VERSION;
+  // CrossInk Notes: use the translated product name (STR_CROSSINK, which this
+  // fork sets to "CrossNotes") rather than a hardcoded "CrossInk", so the
+  // System footer matches the boot and sleep screens.
+  const std::string label = std::string(tr(STR_CROSSINK)) + " " + CROSSINK_VERSION;
   const int maxWidth = pageWidth - systemVersionFooterSideMargin * 2;
   const int bottomLineY =
       pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - systemVersionFooterBottomInset;

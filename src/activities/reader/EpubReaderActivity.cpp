@@ -2175,6 +2175,11 @@ void EpubReaderActivity::onExit() {
 
   BOOKMARKS.unload();
   CLIPPINGS.unload();
+  // CrossInk Notes: notes are auto-loaded when tagging from inside the reader,
+  // so release them alongside the stores they belong with. Every entry point
+  // re-checks the book path before trusting cached notes, but leaving another
+  // book's data resident relies on that check rather than failing closed.
+  NOTES.unload();
   section.reset();
 
   if (pendingReadFolderMove && epub) {
@@ -2585,7 +2590,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Read the Confirm release ONCE and reuse it below. wasReleased() consumes the
+  // one-shot flag set by suppressNextConfirmRelease(), but the underlying
+  // per-frame release event does not clear on read — so polling twice in the
+  // same frame burned the suppression on the first call and then reported the
+  // release on the second. That opened the reader menu on a Confirm a child
+  // screen had already claimed: pick "Open" on a highlight and the book menu
+  // appeared on top of the page you had just jumped to.
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  if (confirmReleased) {
     if (SETTINGS.longPressMenuAction != CrossPointSettings::LONG_MENU_OFF &&
         mappedInput.getHeldTime() >= longPressMenuMs) {
       const auto action = static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressMenuAction);
@@ -2630,7 +2643,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+  if (confirmReleased || ReaderUtils::isTouchMenuGesture(mappedInput)) {
     openReaderMenu();
   }
 
@@ -3886,6 +3899,7 @@ void EpubReaderActivity::startClipSelection() {
     const char* clippingFeedback = nullptr;
     bool saved = false;
     // CrossInk Notes: identity of the clipping just added, passed to the tag picker.
+    bool haveTagTarget = false;
     uint16_t tagSpine = 0;
     uint16_t tagPage = 0;
     uint16_t tagWord = 0;
@@ -3918,6 +3932,12 @@ void EpubReaderActivity::startClipSelection() {
             tagPage = added->startPage;
             tagWord = added->startWordIndex;
             tagClipTimestamp = added->timestamp;
+            haveTagTarget = true;
+          } else {
+            // Without the stored clipping there is no key to attach a note to;
+            // offering the picker would write one at (0,0,0,0) and silently
+            // misattribute it. Fall through to the plain toast instead.
+            LOG_ERR("CLIP", "Saved clipping %u not readable back; skipping tag picker", clippingIndex);
           }
         }
       }
@@ -3930,42 +3950,44 @@ void EpubReaderActivity::startClipSelection() {
     // CrossInk Notes: after a successful highlight, offer the tag/note picker.
     // The clipping toast is shown once the picker closes so it isn't hidden
     // behind it.
-    if (saved) {
+    if (haveTagTarget) {
 #if CROSSINK_APP_CAP_TOUCH
       if (mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
         LOG_ERR("CLIP", "Could not render saved highlight before tag picker");
       }
 #endif
-      startActivityForResult(
-          std::make_unique<TagPickerActivity>(renderer, mappedInput),
-          [this, tagSpine, tagPage, tagWord, tagClipTimestamp](const ActivityResult& tagRes) {
-            if (!tagRes.isCancelled) {
-              const auto& tagResult = std::get<TagResult>(tagRes.data);
-              if (tagResult.tag != 0) {
-                NOTES.saveTag(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
-                              tagResult.tag);
-              }
-              if (!tagResult.noteText.empty()) {
-                NOTES.saveNote(getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
-                               tagResult.noteText.c_str());
-              }
-            }
-            {
-              RenderLock lock(*this);
-              drawToast(renderer, tr(STR_CLIPPING_SAVED));
-            }
-            delay(1000);
-            requestUpdate();
-          });
+      startActivityForResult(std::make_unique<TagPickerActivity>(renderer, mappedInput),
+                             [this, tagSpine, tagPage, tagWord, tagClipTimestamp](const ActivityResult& tagRes) {
+                               // The clipping is already on disk; these writes are the note file,
+                               // which can fail on its own (full or missing card). Saying "saved"
+                               // regardless would tell the user their note was kept when it was
+                               // not — and unlike the highlight, a typed note cannot be recovered.
+                               bool notesSaved = true;
+                               if (!tagRes.isCancelled) {
+                                 const auto& tagResult = std::get<TagResult>(tagRes.data);
+                                 // One write for the whole picker result. Nothing is written when
+                                 // neither was given, so skipping the tag still leaves no note.
+                                 if (tagResult.tag != 0 || !tagResult.noteText.empty()) {
+                                   notesSaved = NOTES.saveNoteAndTag(
+                                       getCurrentBookPath().c_str(), tagSpine, tagPage, tagWord, tagClipTimestamp,
+                                       tagResult.noteText.empty() ? nullptr : tagResult.noteText.c_str(), tagResult.tag,
+                                       tagResult.tag != 0);
+                                 }
+                               }
+                               {
+                                 RenderLock lock(*this);
+                                 drawToast(renderer, notesSaved ? tr(STR_CLIPPING_SAVED) : tr(STR_NOTE_SAVE_FAILED));
+                               }
+                               delay(1000);
+                               requestUpdate();
+                             });
       return;  // Toast/redraw handled in the picker's result callback.
     }
 
     if (clippingFeedback) {
-#if CROSSINK_APP_CAP_TOUCH
-      if (saved && mappedInput.hasTouchHardware() && requestUpdateAndWait() != RequestUpdateResult::Rendered) {
-        LOG_ERR("CLIP", "Could not render saved highlight before clipping toast");
-      }
-#endif
+      // Normally only the failure/limit toasts reach here, since the success
+      // path returns above after the tag picker — except when the clipping
+      // saved but could not be read back, which skips the picker.
       {
         RenderLock lock(*this);
         drawToast(renderer, clippingFeedback);
