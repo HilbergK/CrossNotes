@@ -31,7 +31,6 @@ Rebased onto **CrossInk v1.5.0** — see its entry below for everything that bri
 - **Phone Notes** renamed to **Notes Connect**.
 - New icons for Notes and Bookmarks, and Notes Connect.
 - **Notes and Bookmarks** sorts by the sum of highlights, notes and bookmarks, so the most worked-in books appear first.
-- Notes list layout: tag, chapter and note are each guaranteed some space, and the subtitle font is smaller.
 - Remaining CrossInk branding changed to CrossNotes (system page and website).
 
 ### Fixed
