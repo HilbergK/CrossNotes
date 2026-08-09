@@ -11,12 +11,14 @@ Highlight a passage, write a note on device and/or tag it. Then open a page in a
 **On the device**
 - Tag picker after every highlight — `!` `?` `*` `~` `+` `=` `#` `<` `>` or no tag, plus a "Write a note…" option using the built-in keyboard
 - Tags and note previews shown in the clipping list and detail view
-- **Notes and Bookmarks** home entry — browse every book with highlights or bookmarks; Notes and Bookmarks are separate lists per book
+- Filter a book's notes by tag, and sort them by date added or by location in the book
+- **Notes and Bookmarks** home entry — browse every book with highlights or bookmarks, with a count for each; Notes and Bookmarks are separate lists per book
 - **Notes Connect** home shortcut — starts the hotspot and shows a QR code (and the address to type) straight to the notes page
 - Edit Tag / Edit Note / Delete available from the clipping menu (delete asks for confirmation)
 
 **In your browser (phone, tablet or computer)**
 - `/highlights` page: read each highlight, set its tag from a dropdown, and type a full note next to it
+- Copy a highlight, its note, or both to the clipboard
 - **Export Notes** — download all of a book's highlights, tags, and notes as a Markdown file
 - **Screenshots** tab: gallery of device screenshots with one-tap download or delete
 
