@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report this bug! Please fill out the details below. If you have a feature request, please use the [Discussions](https://github.com/uxjulia/CrossInk/discussions/categories/ideas) feature so that issues focuses only on immediate bugs.
+        Thanks for taking the time to report this bug! Please fill out the details below.
 
   - type: dropdown
     id: device-type
@@ -92,7 +92,7 @@ body:
     id: epub-attachment
     attributes:
       label: File Provided
-      description: If your issue is related to a specific file (EPUB, XTC, etc.), please make sure to attach the exact file in this ticket or email it to julia@uxj.io and reference your issue number. **_EPUBs and XTC files need to be zipped to be attached._**
+      description: If your issue is related to a specific file (EPUB, XTC, etc.), please make sure to attach the exact file in this ticket. **_EPUBs and XTC files need to be zipped to be attached._**
       options:
         - "--- Select ---"
         - Not Applicable
