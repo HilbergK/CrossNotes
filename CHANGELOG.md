@@ -19,6 +19,9 @@ changelogs live here — ours first, then CrossInk's exactly as upstream writes 
 
 ## [v1.2.1] - 2026-08-26 — CrossNotes
 
+### Added
+- Filter highlights on device and Notes Connect by **Any tag**, **No tag**, **With a note**, or **No tag or note**, alongside existing tag filters.
+
 ### Fixed
 - Opening **Notes and Bookmarks** could crash on devices with many heavily annotated books.
 - A book's note count could read higher than the notes it actually shows.

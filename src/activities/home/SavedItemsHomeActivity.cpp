@@ -98,7 +98,7 @@ void SavedItemsHomeActivity::reloadSavedBooks() {
     const size_t slash = p.find_last_of('/');
     std::string name = (slash == std::string::npos) ? p : p.substr(slash + 1);
     const size_t dot = name.find_last_of('.');
-    if (dot != std::string::npos) name = name.substr(0, dot);
+    if (dot != std::string::npos) name.resize(dot);
     b.bookTitle = name.empty() ? p : name;
   }
 

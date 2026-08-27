@@ -41,50 +41,18 @@ class ClippingListModel {
   // cannot be used for this, as it counts from boot and resets.
   enum class SortOrder : uint8_t { Added, Location };
 
-  // Recomputes the visible set, the tags in use, and the filter row, from the
-  // currently loaded CLIPPINGS and NOTES. Call after anything that changes a
-  // clipping or a tag.
-  void rebuild() {
-    visible_.clear();
-    tagsInUse_.clear();
-    const size_t total = CLIPPINGS.clippingCount();
-    visible_.reserve(total);
-    // One pass for both: the visible set and the tags in use each need this
-    // clipping's note, and looking a note up is a linear scan of the notes — so
-    // scanning twice made this O(clippings x notes) twice over.
-    for (size_t i = 0; i < total; ++i) {
-      const Clipping* c = CLIPPINGS.clippingAt(i);
-      if (!c) continue;
-      const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
-      const char tag = note != nullptr ? note->tag : 0;
-      if (tag != 0 && std::find(tagsInUse_.begin(), tagsInUse_.end(), tag) == tagsInUse_.end()) {
-        tagsInUse_.push_back(tag);
-      }
-      if (tagFilter_ != 0 && tag != tagFilter_) continue;
-      visible_.push_back(static_cast<uint16_t>(i));
-    }
-    std::sort(tagsInUse_.begin(), tagsInUse_.end());
+  // tagFilter_ is a char: 0 = show all, printable chars are real tags.
+  // Control bytes below are attribute filters (not valid tag glyphs).
+  static constexpr char kFilterNone = 0;
+  static constexpr char kFilterUntagged = 0x01;  // "No tag"
+  static constexpr char kFilterWithNote = 0x02;  // "With a note"
+  static constexpr char kFilterBare = 0x03;      // "No tag or note"
+  static constexpr char kFilterAnyTag = 0x04;    // "Any tag"
 
-    // Store order is creation order, so Added needs no work. Location reorders
-    // by position in the book; stable_sort so two clippings starting at the
-    // same word keep the order they were made in.
-    if (sortOrder_ == SortOrder::Location) {
-      std::stable_sort(visible_.begin(), visible_.end(), [](const uint16_t lhs, const uint16_t rhs) {
-        const Clipping* a = CLIPPINGS.clippingAt(lhs);
-        const Clipping* b = CLIPPINGS.clippingAt(rhs);
-        if (!a || !b) return false;  // strict weak ordering: unreadable rows stay put
-        if (a->spineIndex != b->spineIndex) return a->spineIndex < b->spineIndex;
-        if (a->startPage != b->startPage) return a->startPage < b->startPage;
-        return a->startWordIndex < b->startWordIndex;
-      });
-    }
-
-    // Offer the filter row only when there is something to choose between: more
-    // than one tag in use (or a filter already applied, so it can be cleared).
-    showFilterRow_ = tagsInUse_.size() > 1 || tagFilter_ != 0;
-    filterRowLabel_ = std::string(tr(STR_FILTER_BY_TAG)) + ":  " +
-                      (tagFilter_ != 0 ? std::string(1, tagFilter_) : std::string(tr(STR_ALL_TAGS)));
-  }
+  // Recomputes the visible set, the tags in use, attribute-filter offers, and
+  // the filter row, from the currently loaded CLIPPINGS and NOTES. Call after
+  // anything that changes a clipping, tag, or note.
+  void rebuild() { rebuildInternal(true); }
 
   // Rows the list draws, the filter row included.
   int rowCount() const { return static_cast<int>(visible_.size()) + filterRowOffset(); }
@@ -114,6 +82,17 @@ class ClippingListModel {
   // picker's contents both derive from this, so they cannot disagree.
   const std::vector<char>& tagsInUse() const { return tagsInUse_; }
 
+  // Attribute filters offered only when they match some but not all clippings.
+  bool offerUntagged() const { return offerUntagged_; }
+  bool offerWithNote() const { return offerWithNote_; }
+  bool offerBare() const { return offerBare_; }
+
+  // True when the filter picker would have at least one choice besides (or
+  // including) a literal tag / attribute option.
+  bool hasFilterOptions() const {
+    return !tagsInUse_.empty() || offerUntagged_ || offerWithNote_ || offerBare_ || tagFilter_ != kFilterNone;
+  }
+
   char tagFilter() const { return tagFilter_; }
   void setTagFilter(const char tag) { tagFilter_ = tag; }
 
@@ -121,13 +100,124 @@ class ClippingListModel {
   void setSortOrder(const SortOrder order) { sortOrder_ = order; }
 
  private:
+  void rebuildInternal(const bool allowEmptyFilterReset) {
+    visible_.clear();
+    tagsInUse_.clear();
+    offerUntagged_ = false;
+    offerWithNote_ = false;
+    offerBare_ = false;
+
+    const size_t total = CLIPPINGS.clippingCount();
+    visible_.reserve(total);
+    size_t scanned = 0;
+    size_t countUntagged = 0;
+    size_t countWithNote = 0;
+    size_t countBare = 0;
+
+    // One pass for the visible set, tags in use, and attribute-offer counts.
+    // Attribute counts must be taken over every clipping *before* the filter
+    // continue — otherwise using a filter zeros the offers and strands the user.
+    for (size_t i = 0; i < total; ++i) {
+      const Clipping* c = CLIPPINGS.clippingAt(i);
+      if (!c) continue;
+      ++scanned;
+      const Note* note = NOTES.getNoteForClipping(c->spineIndex, c->startPage, c->startWordIndex, c->timestamp);
+      const char tag = note != nullptr ? note->tag : 0;
+      const bool hasTag = tag != 0;
+      const bool hasNote = note != nullptr && !note->text.empty();
+
+      if (hasTag && std::find(tagsInUse_.begin(), tagsInUse_.end(), tag) == tagsInUse_.end()) {
+        tagsInUse_.push_back(tag);
+      }
+      if (!hasTag) ++countUntagged;
+      if (hasNote) ++countWithNote;
+      if (!hasTag && !hasNote) ++countBare;
+
+      switch (tagFilter_) {
+        case kFilterNone:
+          break;
+        case kFilterUntagged:
+          if (hasTag) continue;
+          break;
+        case kFilterAnyTag:
+          if (!hasTag) continue;
+          break;
+        case kFilterWithNote:
+          if (!hasNote) continue;
+          break;
+        case kFilterBare:
+          if (hasTag || hasNote) continue;
+          break;
+        default:
+          if (tag != tagFilter_) continue;
+          break;
+      }
+      visible_.push_back(static_cast<uint16_t>(i));
+    }
+    std::sort(tagsInUse_.begin(), tagsInUse_.end());
+
+    // Offer only when the filter would actually narrow the list.
+    offerUntagged_ = countUntagged > 0 && countUntagged < scanned;
+    offerWithNote_ = countWithNote > 0 && countWithNote < scanned;
+    offerBare_ = countBare > 0 && countBare < scanned;
+
+    // Store order is creation order, so Added needs no work. Location reorders
+    // by position in the book; stable_sort so two clippings starting at the
+    // same word keep the order they were made in.
+    if (sortOrder_ == SortOrder::Location) {
+      std::stable_sort(visible_.begin(), visible_.end(), [](const uint16_t lhs, const uint16_t rhs) {
+        const Clipping* a = CLIPPINGS.clippingAt(lhs);
+        const Clipping* b = CLIPPINGS.clippingAt(rhs);
+        if (!a || !b) return false;  // strict weak ordering: unreadable rows stay put
+        if (a->spineIndex != b->spineIndex) return a->spineIndex < b->spineIndex;
+        if (a->startPage != b->startPage) return a->startPage < b->startPage;
+        return a->startWordIndex < b->startWordIndex;
+      });
+    }
+
+    const size_t optionCount =
+        tagsInUse_.size() + (offerUntagged_ ? 2u : 0u) + (offerWithNote_ ? 1u : 0u) + (offerBare_ ? 1u : 0u);
+    // Two or more choices (or a filter already on, so it can be cleared).
+    showFilterRow_ = optionCount > 1 || tagFilter_ != kFilterNone;
+    filterRowLabel_ = std::string(tr(STR_FILTER_BY_TAG)) + ":  " + activeFilterLabel();
+
+    // Deleting the last match under an active filter must not leave a blank
+    // list with no way back — clear the filter and rebuild once.
+    if (allowEmptyFilterReset && visible_.empty() && tagFilter_ != kFilterNone && scanned > 0) {
+      tagFilter_ = kFilterNone;
+      rebuildInternal(false);
+    }
+  }
+
+  static std::string activeFilterLabel(const char filter) {
+    switch (filter) {
+      case kFilterNone:
+        return std::string(tr(STR_ALL_TAGS));
+      case kFilterUntagged:
+        return "No tag";
+      case kFilterAnyTag:
+        return "Any tag";
+      case kFilterWithNote:
+        return "With a note";
+      case kFilterBare:
+        return "No tag or note";
+      default:
+        return std::string(1, filter);
+    }
+  }
+
+  std::string activeFilterLabel() const { return activeFilterLabel(tagFilter_); }
+
   // Display row (less the filter row) -> index in ClippingStore.
   std::vector<uint16_t> visible_;
   std::vector<char> tagsInUse_;
   std::string filterRowLabel_;
-  char tagFilter_ = 0;  // 0 = show everything
+  char tagFilter_ = kFilterNone;
   SortOrder sortOrder_ = SortOrder::Added;
   bool showFilterRow_ = false;
+  bool offerUntagged_ = false;
+  bool offerWithNote_ = false;
+  bool offerBare_ = false;
 };
 
 }  // namespace crossnotes

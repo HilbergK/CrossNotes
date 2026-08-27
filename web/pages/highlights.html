@@ -30,7 +30,9 @@
         <select id="highlight-tag-filter" class="tag-filter" onchange="applyFilters()" aria-label="Filter by tag">
           <option value="">All tags</option>
           <option value="*any">Any tag</option>
-          <option value="*none">Untagged</option>
+          <option value="*none">No tag</option>
+          <option value="*note">With a note</option>
+          <option value="*bare">No tag or note</option>
         </select>
         <span id="filter-count" class="filter-count"></span>
         <button class="btn-export-notes" onclick="exportNotes()">Export Notes</button>

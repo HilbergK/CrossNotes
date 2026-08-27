@@ -327,22 +327,42 @@ function resetFilters() {
   populateTagFilter();
 }
 
-// Only offer tags this book actually uses, so the dropdown stays short.
+// Only offer tags and attribute filters this book can actually narrow on.
 function populateTagFilter() {
   const sel = document.getElementById('highlight-tag-filter');
   if (!sel) return;
+
+  const total = currentHighlights.length;
+  let countTagged = 0;
+  let countUntagged = 0;
+  let countWithNote = 0;
+  let countBare = 0;
   const used = [];
   currentHighlights.forEach(h => {
-    const t = (h.note && h.note.tag) ? h.note.tag : '';
-    if (t && used.indexOf(t) === -1) used.push(t);
+    const tag = (h.note && h.note.tag) ? h.note.tag : '';
+    const hasTag = tag !== '';
+    const hasNote = !!(h.note && h.note.text);
+    if (hasTag) countTagged++;
+    else countUntagged++;
+    if (hasNote) countWithNote++;
+    if (!hasTag && !hasNote) countBare++;
+    if (tag && used.indexOf(tag) === -1) used.push(tag);
   });
   used.sort();
+
+  const offerTagged = countTagged > 0 && countTagged < total;
+  const offerUntagged = countUntagged > 0 && countUntagged < total;
+  const offerWithNote = countWithNote > 0 && countWithNote < total;
+  const offerBare = countBare > 0 && countBare < total;
+
   const keep = sel.value;
-  sel.innerHTML =
-    '<option value="">All tags</option>' +
-    '<option value="*any">Any tag</option>' +
-    '<option value="*none">Untagged</option>' +
-    used.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  let html = '<option value="">All tags</option>';
+  html += used.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if (offerTagged) html += '<option value="*any">Any tag</option>';
+  if (offerUntagged) html += '<option value="*none">No tag</option>';
+  if (offerWithNote) html += '<option value="*note">With a note</option>';
+  if (offerBare) html += '<option value="*bare">No tag or note</option>';
+  sel.innerHTML = html;
   sel.value = keep;
   if (sel.selectedIndex < 0) sel.value = '';
 }
@@ -373,9 +393,15 @@ function filteredHighlights() {
 
   return currentHighlights.filter(h => {
     const tag = (h.note && h.note.tag) ? h.note.tag : '';
+    const hasNote = !!(h.note && h.note.text);
     if (tagSel === '*any' && !tag) return false;
     if (tagSel === '*none' && tag) return false;
-    if (tagSel && tagSel !== '*any' && tagSel !== '*none' && tag !== tagSel) return false;
+    if (tagSel === '*note' && !hasNote) return false;
+    if (tagSel === '*bare' && (tag || hasNote)) return false;
+    if (tagSel && tagSel !== '*any' && tagSel !== '*none' && tagSel !== '*note' && tagSel !== '*bare' &&
+        tag !== tagSel) {
+      return false;
+    }
 
     if (!q) return true;
     const note = (h.note && h.note.text) ? h.note.text : '';

@@ -423,9 +423,9 @@ void EpubReaderClippingListActivity::showSortMenu() {
 void EpubReaderClippingListActivity::showListMenu(const bool ignoreInitialConfirmRelease) {
   std::vector<FileBrowserActionActivity::MenuItem> items;
   items.reserve(2);
-  // Filtering is only meaningful once something is tagged; offering it on an
-  // untagged book would open a picker with nothing in it.
-  if (!model.tagsInUse().empty()) items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
+  // Filtering is meaningful once tags or attribute options exist (some but not
+  // all highlights match). Offering it otherwise opens an empty picker.
+  if (model.hasFilterOptions()) items.push_back({FileBrowserAction::FilterTag, StrId::STR_FILTER_BY_TAG});
   items.push_back({FileBrowserAction::SortClippings, StrId::STR_SORT_BY});
 
   startActivityForResult(
@@ -455,31 +455,52 @@ void EpubReaderClippingListActivity::showListMenu(const bool ignoreInitialConfir
 }
 
 void EpubReaderClippingListActivity::showTagFilterMenu() {
-  // Offer only the tags this book actually uses, plus "All" to clear the
-  // filter — an alphabet of unused symbols would be noise.
-  // Built with the visible set, so the picker and the filter row always agree.
-  const std::vector<char> tags = model.tagsInUse();
+  // Parallel labels/values so index → filter is a direct lookup. Order: All,
+  // tags in use, then attribute filters (only those that would narrow the list).
+  using Filter = crossnotes::ClippingListModel;
+  std::vector<std::string> labels;
+  std::vector<char> values;
+  labels.reserve(model.tagsInUse().size() + 5);
+  values.reserve(model.tagsInUse().size() + 5);
 
-  if (tags.empty()) {
+  labels.emplace_back(tr(STR_ALL_TAGS));
+  values.push_back(Filter::kFilterNone);
+  for (const char t : model.tagsInUse()) {
+    labels.emplace_back(1, t);
+    values.push_back(t);
+  }
+  if (model.offerUntagged()) {
+    labels.emplace_back("Any tag");
+    values.push_back(Filter::kFilterAnyTag);
+    labels.emplace_back("No tag");
+    values.push_back(Filter::kFilterUntagged);
+  }
+  if (model.offerWithNote()) {
+    labels.emplace_back("With a note");
+    values.push_back(Filter::kFilterWithNote);
+  }
+  if (model.offerBare()) {
+    labels.emplace_back("No tag or note");
+    values.push_back(Filter::kFilterBare);
+  }
+
+  if (values.size() <= 1) {
     BookActions::drawToast(renderer, tr(STR_NO_CLIPPINGS));
     delay(1000);
     requestUpdate();
     return;
   }
 
-  std::vector<std::string> labels;
-  labels.reserve(tags.size() + 1);
-  labels.emplace_back(tr(STR_ALL_TAGS));
-  for (const char t : tags) labels.emplace_back(1, t);
-
   int selected = 0;
-  if (model.tagFilter() != 0) {
-    const auto it = std::find(tags.begin(), tags.end(), model.tagFilter());
-    if (it != tags.end()) selected = static_cast<int>(std::distance(tags.begin(), it)) + 1;
-  }
+  const auto it = std::find(values.begin(), values.end(), model.tagFilter());
+  if (it != values.end()) selected = static_cast<int>(std::distance(values.begin(), it));
 
-  optionPopup.show(StrId::STR_FILTER_BY_TAG, labels, selected, [this, tags](const int idx) {
-    model.setTagFilter((idx <= 0) ? 0 : tags[static_cast<size_t>(idx - 1)]);
+  optionPopup.show(StrId::STR_FILTER_BY_TAG, labels, selected, [this, values](const int idx) {
+    if (idx >= 0 && idx < static_cast<int>(values.size())) {
+      model.setTagFilter(values[static_cast<size_t>(idx)]);
+    } else {
+      model.setTagFilter(Filter::kFilterNone);
+    }
     // Leave the detail view: the filter can be opened from it,
     // and afterwards the selection no longer refers to the
     // clipping whose text is on screen.
@@ -575,7 +596,7 @@ void EpubReaderClippingListActivity::showClippingActionMenu(const bool ignoreIni
           // cut in half and drawn as a broken glyph.
           size_t cut = 60;
           while (cut > 0 && (static_cast<unsigned char>(preview[cut]) & 0xC0) == 0x80) --cut;
-          preview = preview.substr(0, cut) + "...";
+          preview.replace(cut, std::string::npos, "...");
         }
 
         startActivityForResult(std::make_unique<ConfirmationActivity>(
@@ -970,8 +991,8 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
       subtitle = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_UNKNOWN_CHAPTER);
       item.subtitle = subtitle.c_str();
 
-      std::string& noteLine = uiNotes[slot];
       if (note) {
+        std::string& noteLine = uiNotes[slot];
         if (note->tag != 0) {
           noteLine += '[';
           noteLine += note->tag;
