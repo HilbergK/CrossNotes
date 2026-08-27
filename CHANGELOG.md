@@ -22,9 +22,11 @@ changelogs live here — ours first, then CrossInk's exactly as upstream writes 
 ### Added
 - Filter highlights on device and Notes Connect by **Any tag**, **No tag**, **With a note**, or **No tag or note**, alongside existing tag filters.
 
+### Changed
+- New highlights are capped at 512 characters, matching CrossInk, so clippings files stay readable if you switch back. The full text is still written to the exported clippings file.
+
 ### Fixed
 - Opening **Notes and Bookmarks** could crash on devices with many heavily annotated books.
-- A book's note count could read higher than the notes it actually shows.
 
 ---
 

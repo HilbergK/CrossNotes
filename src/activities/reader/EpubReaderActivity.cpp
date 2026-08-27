@@ -3908,10 +3908,15 @@ void EpubReaderActivity::startClipSelection() {
       const auto& clip = std::get<ClippingResult>(result.data);
       if (!clip.text.empty()) {
         const size_t clippingIndex = CLIPPINGS.clippingCount();
+        std::string storeText = clip.text;
+        if (storeText.size() > CLIPPING_TEXT_PORTABLE_MAX) {
+          storeText.resize(static_cast<size_t>(
+              utf8SafeTruncateBuffer(storeText.c_str(), static_cast<int>(CLIPPING_TEXT_PORTABLE_MAX))));
+        }
         const auto addResult =
             CLIPPINGS.addClipping(static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage,
                                   clip.sectionPageCount, clip.startPageWordIndex, clip.endPageWordIndex, clip.wordCount,
-                                  chapterTitle.c_str(), clip.paragraphIndex, clip.text, clippingLayoutSignature);
+                                  chapterTitle.c_str(), clip.paragraphIndex, storeText, clippingLayoutSignature);
         bool exported = false;
         if (addResult == ClippingStore::AddResult::Added) {
           exported = ClippingsManager::saveClipping(bookTitle, author, chapterTitle,
