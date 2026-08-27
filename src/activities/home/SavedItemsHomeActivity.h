@@ -51,6 +51,10 @@ class SavedItemsHomeActivity final : public Activity {
   // theme in buildListScreen() and used by render().
   std::array<std::string, 20> uiCounts;
   crossnotes::NotesListLayout notesLayout;
+  // Reused across paints so capacity is retained (same idea as the clipping
+  // list's uiItems). Labels borrow books[i].bookTitle.c_str() for the duration
+  // of screen.list().
+  std::vector<freeink::ui::ListItem> uiItems;
 
   int listTop = 0;
   int listBottom = 0;

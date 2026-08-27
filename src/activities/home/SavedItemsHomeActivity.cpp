@@ -286,18 +286,18 @@ void SavedItemsHomeActivity::buildListScreen(UiApp::ScreenType& screen) {
     screen.centeredText(tr(STR_NO_SAVED_ITEMS), screen.theme().bodyText);
     return;
   }
-  std::vector<fui::ListItem> items;
-  items.reserve(books.size());
+  uiItems.clear();
+  uiItems.reserve(books.size());
   for (size_t i = 0; i < books.size(); ++i) {
     fui::ListItem item;
     item.label = books[i].bookTitle.c_str();
     if (!books[i].bookAuthor.empty()) item.subtitle = books[i].bookAuthor.c_str();
     item.actionValue = static_cast<int16_t>(i);
-    items.push_back(item);
+    uiItems.push_back(item);
   }
   fui::ListProps props;
-  props.items = items.data();
-  props.count = static_cast<uint16_t>(items.size());
+  props.items = uiItems.data();
+  props.count = static_cast<uint16_t>(uiItems.size());
   props.selectedIndex = static_cast<int16_t>(selectedIndex);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;
@@ -434,7 +434,6 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
                   entry.bookTitle);
               if (!confirmation) {
                 LOG_ERR("SVA", "OOM: bookmark clear ConfirmationActivity");
-                reloadSavedBooks();
                 requestUpdate();
                 return;
               }
@@ -442,8 +441,8 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
                 if (!confirmation.isCancelled) {
                   BOOKMARKS.loadForBook(entry.bookPath, entry.bookTitle, entry.bookAuthor, entry.bookType);
                   BOOKMARKS.clearAll();
+                  reloadSavedBooks();
                 }
-                reloadSavedBooks();
                 requestUpdate();
               });
               return;
@@ -458,7 +457,6 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
                   entry.bookTitle);
               if (!confirmation) {
                 LOG_ERR("SVA", "OOM: clipping clear ConfirmationActivity");
-                reloadSavedBooks();
                 requestUpdate();
                 return;
               }
@@ -469,8 +467,8 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
                   // CrossInk Notes: clearing a book's clippings also clears its
                   // notes/tags, since notes anchor to clippings that are gone.
                   NoteStore::deleteForFilePath(entry.bookPath);
+                  reloadSavedBooks();
                 }
-                reloadSavedBooks();
                 requestUpdate();
               });
               return;
@@ -479,7 +477,7 @@ void SavedItemsHomeActivity::showSavedBookActionMenu(const int bookIndex, const 
               break;
           }
         }
-        reloadSavedBooks();
+        // Menu cancelled or no mutating action — keep the list we already have.
         requestUpdate();
       });
 }

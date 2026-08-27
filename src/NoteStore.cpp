@@ -264,8 +264,7 @@ bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16
   // Drop every note with no text and no tag — not just the one being edited.
   // Tag-clear and web portal writes can leave blank shells; clearing one note
   // on a legacy file also rewrites away any others in the same pass.
-  notes.erase(std::remove_if(notes.begin(), notes.end(),
-                             [](const Note& n) { return n.text.empty() && n.tag == 0; }),
+  notes.erase(std::remove_if(notes.begin(), notes.end(), [](const Note& n) { return n.text.empty() && n.tag == 0; }),
               notes.end());
   // idx is stale after the sweep above; nothing below must use it.
 

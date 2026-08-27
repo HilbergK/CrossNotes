@@ -3,6 +3,7 @@
 #include <Arduino.h>  // for delay()
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -977,8 +978,16 @@ void EpubReaderClippingListActivity::buildListScreen(UiApp::ScreenType& screen) 
           noteLine += "] ";
         }
         if (!note->text.empty()) {
+          // One row shows ~40 chars; flattening the whole note (up to 4KB) is waste.
+          // Cap before flatten, on a UTF-8 boundary.
+          constexpr size_t kNotePreviewMaxBytes = 160;
           std::string noteFlat;
-          buildOneLineSnippetText(note->text, noteFlat);
+          if (note->text.size() <= kNotePreviewMaxBytes) {
+            buildOneLineSnippetText(note->text, noteFlat);
+          } else {
+            const int safeLen = utf8SafeTruncateBuffer(note->text.c_str(), static_cast<int>(kNotePreviewMaxBytes));
+            buildOneLineSnippetText(std::string(note->text.data(), static_cast<size_t>(safeLen)), noteFlat);
+          }
           noteLine += noteFlat;
         }
       }

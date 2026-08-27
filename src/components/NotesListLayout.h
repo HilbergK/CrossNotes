@@ -112,9 +112,6 @@ class NotesListLayout {
     return rows;
   }
 
-  int lineHeight() const { return lineHeight_; }
-  int textWidth() const { return textWidth_; }
-  int visibleRows() const { return static_cast<int>(visibleRows_); }
   bool ready() const { return rowStep_ > 0 && lineHeight_ > 0; }
 
   // Top of the given on-screen row (0 = first visible).
