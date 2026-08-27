@@ -2241,9 +2241,11 @@ void CrossPointWebServer::handlePostNote() {
   // two or three times over — the raw String, the JsonDocument's pool, and the
   // std::string copy below — and NoteStore only truncates to kNoteTextMax after
   // all of that, so a large paste into the note box (a whole chapter, say) could
-  // exhaust the heap and reboot the device. Generous against kNoteTextMax so a
-  // legitimate long note is never refused.
-  constexpr size_t MAX_NOTE_BODY_BYTES = NoteStore::kNoteTextMax + 1024;
+  // exhaust the heap and reboot the device. The cap is on the whole JSON, not
+  // the note field: kNoteTextMax * 2 covers escaping expansion (" \ newline → 2
+  // bytes, controls → \u00XX), and +1024 covers a long book path and keys, so a
+  // legitimate max-length note is not refused with 413.
+  constexpr size_t MAX_NOTE_BODY_BYTES = NoteStore::kNoteTextMax * 2 + 1024;
   if (body.length() > MAX_NOTE_BODY_BYTES) {
     server->send(413, "text/plain", "Note too long");
     return;

@@ -48,6 +48,9 @@ class ClippingListModel {
   static constexpr char kFilterWithNote = 0x02;  // "With a note"
   static constexpr char kFilterBare = 0x03;      // "No tag or note"
   static constexpr char kFilterAnyTag = 0x04;    // "Any tag"
+  // Labels, offer rule (0 < count < scanned), and predicates must stay in
+  // lockstep with web/pages/highlights.js populateTagFilter / filteredHighlights
+  // (*any, *none, *note, *bare). There is no shared schema — change both.
 
   // Recomputes the visible set, the tags in use, attribute-filter offers, and
   // the filter row, from the currently loaded CLIPPINGS and NOTES. Call after
@@ -183,7 +186,7 @@ class ClippingListModel {
 
     // Deleting the last match under an active filter must not leave a blank
     // list with no way back — clear the filter and rebuild once.
-    if (allowEmptyFilterReset && visible_.empty() && tagFilter_ != kFilterNone && scanned > 0) {
+    if (allowEmptyFilterReset && visible_.empty() && tagFilter_ != kFilterNone) {
       tagFilter_ = kFilterNone;
       rebuildInternal(false);
     }

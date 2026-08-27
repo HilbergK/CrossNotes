@@ -122,7 +122,8 @@ class NoteStore {
 
   // Migrate a book's notes to a new path when the book moves (e.g. Move to
   // /Read). Static, operates on disk; mirrors ClippingStore::migrateForFilePath.
-  static void migrateForFilePath(const std::string& oldPath, const std::string& newPath);
+  // True when there is nothing to move or the rename succeeded.
+  static bool migrateForFilePath(const std::string& oldPath, const std::string& newPath);
 
  private:
   NoteStore() = default;
@@ -144,6 +145,11 @@ class NoteStore {
   // Set when the book's notes file existed but would not parse. Blocks writes
   // so a corrupt file is never silently replaced by an empty one.
   bool loadFailed = false;
+  // Set when the file's version is newer than this firmware writes. Blocks
+  // saves so a future format is not rewritten as v1 and stripped of fields
+  // we did not understand. Distinct from loadFailed: that one retries on
+  // the next loadForBook, this one must not.
+  bool newerVersionOnDisk = false;
   std::string bookFilePath;
   std::vector<Note> notes;
 };

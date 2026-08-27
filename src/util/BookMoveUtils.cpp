@@ -61,7 +61,10 @@ bool migrateMovedEpubState(const std::string& oldPath, const std::string& newPat
   }
 
   // CrossInk Notes: move the book's notes/tags alongside its clippings.
-  NoteStore::migrateForFilePath(oldPath, newPath);
+  if (!NoteStore::migrateForFilePath(oldPath, newPath)) {
+    LOG_ERR("BookMove", "Failed to migrate notes for moved book %s -> %s", oldPath.c_str(), newPath.c_str());
+    ok = false;
+  }
 
   if (keepInRecents) {
     RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);

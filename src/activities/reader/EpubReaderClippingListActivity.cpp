@@ -358,18 +358,26 @@ void EpubReaderClippingListActivity::deleteSelectedClipping() {
   if (isFilterRow(selectedIndex)) return;
   if (selectedIndex < 0 || selectedIndex >= visibleCount()) return;
 
-  // Remove the clipping's note/tag along with it — otherwise the note record
-  // would sit orphaned in the notes file forever.
+  // Remove the clipping first. If that rewrite fails, the highlight stays and
+  // so does its note. Deleting the note first would make a failed clipping
+  // save unrecoverable. An orphaned note after a failed note-delete is cleared
+  // by pruneMissing() on the next open.
+  const size_t storeIndex = storeIndexFor(selectedIndex);
+  Clipping doomed;
+  bool haveDoomed = false;
   if (!CLIPPINGS.getBookFilePath().empty()) {
-    const Clipping* doomedPtr = CLIPPINGS.clippingAt(storeIndexFor(selectedIndex));
+    const Clipping* doomedPtr = CLIPPINGS.clippingAt(storeIndex);
     if (doomedPtr) {
-      const Clipping& doomed = *doomedPtr;
-      NOTES.deleteNote(CLIPPINGS.getBookFilePath().c_str(), doomed.spineIndex, doomed.startPage, doomed.startWordIndex,
-                       doomed.timestamp);
+      doomed = *doomedPtr;
+      haveDoomed = true;
     }
   }
 
-  if (!CLIPPINGS.removeClippingAt(storeIndexFor(selectedIndex))) return;
+  if (!CLIPPINGS.removeClippingAt(storeIndex)) return;
+  if (haveDoomed) {
+    NOTES.deleteNote(CLIPPINGS.getBookFilePath().c_str(), doomed.spineIndex, doomed.startPage, doomed.startWordIndex,
+                     doomed.timestamp);
+  }
 
   detailMode = false;
   detailText.clear();
@@ -683,10 +691,17 @@ void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clippin
     return;
   }
 
+  // Note text now affects With a note / No tag or note, so the visible set is
+  // stale the moment it changes — same rebuild as editTagForClipping. Capture
+  // the store index here: by the time the keyboard returns, selection may have
+  // moved.
+  const size_t editedStoreIndex =
+      (selectedIndex >= 0 && !isFilterRow(selectedIndex)) ? storeIndexFor(selectedIndex) : SIZE_MAX;
+
   startActivityForResult(
       std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_EDIT_NOTE), initialText,
                                               NoteStore::kNoteTextMax),
-      [this, clipping](const ActivityResult& result) {
+      [this, clipping, editedStoreIndex](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto& kb = std::get<KeyboardResult>(result.data);
           const Note* existing = NOTES.getNoteForClipping(clipping.spineIndex, clipping.startPage,
@@ -707,12 +722,27 @@ void EpubReaderClippingListActivity::editNoteForClipping(const Clipping& clippin
                                        clipping.startWordIndex, clipping.timestamp);
             }
           }
-          detailLayoutWidth = 0;  // note changed — force detail re-layout
-          rowCacheDirty = true;   // the row's note line changed
           if (!saved) {
             BookActions::drawToast(renderer, tr(STR_NOTE_SAVE_FAILED));
             delay(1000);
           }
+          detailLayoutWidth = 0;  // note changed — force detail re-layout
+          rebuildVisibleClippings();
+          const int row = (editedStoreIndex != SIZE_MAX) ? displayRowForStoreIndex(editedStoreIndex) : -1;
+          if (row >= 0) {
+            selectedIndex = row;
+          } else {
+            // The note no longer matches the active filter, so the clipping
+            // just left the list — and with it the text any open detail view
+            // was showing.
+            detailMode = false;
+            detailText.clear();
+            detailLines.clear();
+            detailPage = 0;
+            selectedIndex = filterRowOffset();
+          }
+          if (selectedIndex >= visibleCount()) selectedIndex = std::max(0, visibleCount() - 1);
+          topIndex = followListSelection(selectedIndex, topIndex, visibleRows, visibleCount());
         }
         requestUpdate();
       });

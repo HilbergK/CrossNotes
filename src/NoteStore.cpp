@@ -1,6 +1,7 @@
 #include "NoteStore.h"
 
 #include <Arduino.h>  // for millis()
+#include <Utf8.h>
 #include <uzlib.h>
 
 #include <algorithm>
@@ -10,6 +11,11 @@
 static constexpr const char* LOG_TAG = "NoteStore";
 static constexpr const char* NOTES_DIR = "/.crosspoint/notes/";
 static constexpr size_t NOTE_TEXT_MAX = NoteStore::kNoteTextMax;
+
+static void capNoteText(std::string& text) {
+  if (text.size() <= NOTE_TEXT_MAX) return;
+  text.resize(static_cast<size_t>(utf8SafeTruncateBuffer(text.c_str(), static_cast<int>(NOTE_TEXT_MAX))));
+}
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
 
@@ -63,6 +69,7 @@ void NoteStore::loadForBook(const char* filePath, const char* /*bookType*/) {
 
 void NoteStore::unload() {
   loadFailed = false;
+  newerVersionOnDisk = false;
   notes.clear();
   bookFilePath.clear();
   loaded = false;
@@ -80,6 +87,7 @@ bool NoteStore::loadFromFile(const std::string& path) {
   }
   const int fileVersion = doc["v"] | 0;  // 0 = written before the marker existed
   if (fileVersion > kNotesFileVersion) {
+    newerVersionOnDisk = true;
     LOG_ERR(LOG_TAG, "Notes file %s is version %d, newer than this firmware understands (%d) — reading what it can",
             path.c_str(), fileVersion, kNotesFileVersion);
   }
@@ -99,7 +107,7 @@ bool NoteStore::loadFromFile(const std::string& path) {
     note.text = obj["text"] | std::string{};
     // kNoteTextMax was only enforced on save. A hand-edited file could hold a
     // multi-megabyte note, and this runs on every open of that book.
-    if (note.text.size() > NOTE_TEXT_MAX) note.text.resize(NOTE_TEXT_MAX);
+    capNoteText(note.text);
     note.timestamp = obj["timestamp"] | uint32_t(0);
     // tag stored as a 1-character string; 0 / missing = no tag
     const char* tagStr = obj["tag"] | "";
@@ -117,6 +125,10 @@ bool NoteStore::saveToFile(const std::string& path) const {
   // caller surfaces that as "Could not save note".
   if (loadFailed) {
     LOG_ERR(LOG_TAG, "Refusing to overwrite %s — its existing contents could not be read", path.c_str());
+    return false;
+  }
+  if (newerVersionOnDisk) {
+    LOG_ERR(LOG_TAG, "Refusing to overwrite %s — it is a newer notes format than this firmware writes", path.c_str());
     return false;
   }
   // Ensure directory exists
@@ -246,7 +258,10 @@ bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16
   if (idx >= 0) {
     // Update existing. Also migrates a legacy (0) key forward.
     notes[idx].clippingTimestamp = clippingTimestamp;
-    if (text != nullptr) notes[idx].text = std::string(text).substr(0, NOTE_TEXT_MAX);
+    if (text != nullptr) {
+      notes[idx].text = text;
+      capNoteText(notes[idx].text);
+    }
     if (applyTag) notes[idx].tag = tag;
     notes[idx].timestamp = millis();
   } else {
@@ -255,7 +270,8 @@ bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16
     note.startPage = startPage;
     note.startWordIndex = startWordIndex;
     note.clippingTimestamp = clippingTimestamp;
-    note.text = text != nullptr ? std::string(text).substr(0, NOTE_TEXT_MAX) : std::string();
+    note.text = text != nullptr ? std::string(text) : std::string();
+    capNoteText(note.text);
     note.tag = applyTag ? tag : 0;
     note.timestamp = millis();
     notes.push_back(std::move(note));
@@ -268,7 +284,14 @@ bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16
               notes.end());
   // idx is stale after the sweep above; nothing below must use it.
 
-  return saveToFile(path);
+  if (!saveToFile(path)) {
+    // RAM already has the edit. Drop the short-circuit so loadForBook re-reads
+    // disk — otherwise the list keeps showing a note that never reached the card.
+    loaded = false;
+    loadForBook(filePath, "epub");
+    return false;
+  }
+  return true;
 }
 
 bool NoteStore::saveNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
@@ -292,7 +315,12 @@ bool NoteStore::deleteNote(const char* filePath, uint16_t spineIndex, uint16_t s
   if (idx < 0) return true;  // Already gone
 
   notes.erase(notes.begin() + idx);
-  return saveToFile(path);
+  if (!saveToFile(path)) {
+    loaded = false;
+    loadForBook(filePath, "epub");
+    return false;
+  }
+  return true;
 }
 
 // ─── Migration / bulk delete ────────────────────────────────────────────────
@@ -401,16 +429,20 @@ void NoteStore::deleteForFilePath(const std::string& filePath) {
   }
 }
 
-void NoteStore::migrateForFilePath(const std::string& oldPath, const std::string& newPath) {
+bool NoteStore::migrateForFilePath(const std::string& oldPath, const std::string& newPath) {
   const std::string oldFile = notesFilePath(oldPath.c_str());
   const std::string newFile = notesFilePath(newPath.c_str());
+  bool ok = true;
   if (Storage.exists(oldFile.c_str()) && !Storage.exists(newFile.c_str())) {
-    Storage.rename(oldFile.c_str(), newFile.c_str());
+    if (!Storage.rename(oldFile.c_str(), newFile.c_str())) {
+      ok = false;
+    }
   }
   // Drop stale in-memory state for the old path so a subsequent save can't
-  // recreate the file at the old location.
+  // recreate the file at the old location — even if the rename failed.
   NoteStore& inst = getInstance();
   if (inst.loaded && inst.bookFilePath == oldPath) {
     inst.unload();
   }
+  return ok;
 }

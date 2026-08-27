@@ -12,7 +12,7 @@ function showMessage(text, type) {
 }
 
 function noteId(h) {
-  return `note_${h.spineIndex}_${h.startPage}_${h.startWordIndex}`;
+  return `note_${h.spineIndex}_${h.startPage}_${h.startWordIndex}_${h.timestamp || 0}`;
 }
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ function tagOptionsHtml(selectedTag) {
   return TAG_OPTIONS.map(t => {
     const label = t === '' ? 'No tag' : t;
     const selected = (selectedTag || '') === t ? ' selected' : '';
-    return `<option value="${t}"${selected}>${escapeHtml(label)}</option>`;
+    return `<option value="${escapeHtml(t)}"${selected}>${escapeHtml(label)}</option>`;
   }).join('');
 }
 
@@ -296,6 +296,7 @@ function renderHighlights(highlights) {
         class="note-textarea"
         id="${noteId(h)}"
         data-idx="${idx}"
+        maxlength="4096"
         placeholder="Add a note…"
         rows="3"
       >${escapeHtml(noteText)}</textarea>
@@ -328,6 +329,9 @@ function resetFilters() {
 }
 
 // Only offer tags and attribute filters this book can actually narrow on.
+// Keep labels, order, offer rule, and *any/*none/*note/*bare predicates in
+// lockstep with ClippingListModel.h (kFilterAnyTag / Untagged / WithNote / Bare).
+// There is no shared schema — change both.
 function populateTagFilter() {
   const sel = document.getElementById('highlight-tag-filter');
   if (!sel) return;
@@ -356,7 +360,7 @@ function populateTagFilter() {
   const offerBare = countBare > 0 && countBare < total;
 
   const keep = sel.value;
-  let html = '<option value="">All tags</option>';
+  let html = '<option value="">All</option>';
   html += used.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   if (offerTagged) html += '<option value="*any">Any tag</option>';
   if (offerUntagged) html += '<option value="*none">No tag</option>';
@@ -387,6 +391,7 @@ function captureUnsavedEdits() {
 
 // The highlights currently passing the search box and tag filter. Export uses
 // this too, so what you download matches what you are looking at.
+// Sentinel predicates must match ClippingListModel.h — see populateTagFilter.
 function filteredHighlights() {
   const q = (document.getElementById('highlight-search')?.value || '').trim().toLowerCase();
   const tagSel = document.getElementById('highlight-tag-filter')?.value || '';
@@ -475,7 +480,6 @@ async function saveNote(idx) {
   const h = currentHighlights[idx];
   const textarea = document.getElementById(noteId(h));
   const tagSelect = document.getElementById('tag_' + idx);
-  const statusEl = document.getElementById('status_' + idx);
   const btn = textarea.closest('.highlight-card').querySelector('.btn-save-note');
 
   const tagValue = tagSelect ? tagSelect.value : '';
@@ -483,6 +487,13 @@ async function saveNote(idx) {
   // whatever the user has typed since — text the device was never sent — and
   // then flash "Saved" over it.
   const noteText = textarea.value.trim();
+  const savedPath = currentBookPath;
+  // kNoteTextMax is 4096 bytes. maxlength above counts UTF-16 units, so
+  // non-ASCII can still exceed the device cap — refuse before the fetch.
+  if (new TextEncoder().encode(noteText).length > 4096) {
+    showMessage('Note is too long (4096 byte limit).', 'error');
+    return;
+  }
 
   btn.disabled = true;
   try {
@@ -490,7 +501,7 @@ async function saveNote(idx) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: currentBookPath,
+        path: savedPath,
         spineIndex: h.spineIndex,
         startPage: h.startPage,
         startWordIndex: h.startWordIndex,
@@ -500,6 +511,9 @@ async function saveNote(idx) {
       })
     });
     if (!res.ok) throw new Error(await res.text());
+    // A slower save for a previously selected book must not write into the
+    // array that now belongs to a different book.
+    if (currentBookPath !== savedPath) return;
 
     // Update local state
     if (!currentHighlights[idx].note) {
@@ -507,16 +521,16 @@ async function saveNote(idx) {
     }
     currentHighlights[idx].note.text = noteText;
     currentHighlights[idx].note.tag = tagValue;
+    if (textarea.value.trim() === noteText) textarea.value = noteText;
 
     populateTagFilter();  // a tag may have just appeared or disappeared
+    applyFilters();
 
-    const badgeEl = document.getElementById('tagbadge_' + idx);
-    if (badgeEl) {
-      badgeEl.innerHTML = tagValue ? `<span class="note-tag">${escapeHtml(tagValue)}</span>` : '';
+    const statusAfter = document.getElementById('status_' + idx);
+    if (statusAfter) {
+      statusAfter.classList.add('visible');
+      setTimeout(() => statusAfter.classList.remove('visible'), 2500);
     }
-
-    statusEl.classList.add('visible');
-    setTimeout(() => statusEl.classList.remove('visible'), 2500);
   } catch (e) {
     showMessage('Failed to save note: ' + e.message, 'error');
   } finally {
