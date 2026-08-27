@@ -108,9 +108,11 @@ class NoteStore {
   bool deleteNote(const char* filePath, uint16_t spineIndex, uint16_t startPage, uint16_t startWordIndex,
                   uint32_t clippingTimestamp);
 
-  // Number of notes carrying a tag or text for a book, without disturbing the
-  // singleton's currently loaded book. Reads and parses that book's notes file,
-  // so call it per screen build, not per frame.
+  // Number of note entries for a book, without disturbing the singleton's
+  // currently loaded book. Parses with text filtered out so home reload stays
+  // bounded; counts objects only (same rule as loadFromFile). After save,
+  // empty shells are purged so entries match real notes. Used only by
+  // SavedItemsHomeActivity (subtitle badge and sort key).
   static uint16_t countForFilePath(const std::string& filePath);
 
   // Delete all notes/tags for a book — e.g. when the book file is deleted or

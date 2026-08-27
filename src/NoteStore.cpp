@@ -261,6 +261,14 @@ bool NoteStore::saveNoteAndTag(const char* filePath, uint16_t spineIndex, uint16
     notes.push_back(std::move(note));
   }
 
+  // Drop every note with no text and no tag — not just the one being edited.
+  // Tag-clear and web portal writes can leave blank shells; clearing one note
+  // on a legacy file also rewrites away any others in the same pass.
+  notes.erase(std::remove_if(notes.begin(), notes.end(),
+                             [](const Note& n) { return n.text.empty() && n.tag == 0; }),
+              notes.end());
+  // idx is stale after the sweep above; nothing below must use it.
+
   return saveToFile(path);
 }
 
@@ -359,15 +367,24 @@ uint16_t NoteStore::countForFilePath(const std::string& filePath) {
   if (!Storage.exists(path.c_str())) return 0;
   FsFile file = Storage.open(path.c_str(), O_RDONLY);
   if (!file) return 0;
+
+  // Home screen only needs how many notes exist — not their text. Filtering
+  // text out keeps peak heap near N × tiny metadata instead of file size.
+  // Keep spineIndex (always written) so the filter does not suggest that
+  // tagged-ness affects the count — we still count every object row.
+  JsonDocument filter;
+  filter["notes"][0]["spineIndex"] = true;
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, file);
+  const DeserializationError err =
+      deserializeJson(doc, file, DeserializationOption::Filter(filter.as<JsonVariantConst>()));
   file.close();
   if (err) return 0;
+
+  // Count objects only, matching loadFromFile — non-object rows in a hand-edited
+  // array must not inflate the badge relative to what the list would show.
   uint16_t count = 0;
-  for (const JsonObject obj : doc["notes"].as<JsonArray>()) {
-    const char* text = obj["text"] | "";
-    const char* tag = obj["tag"] | "";
-    if ((text != nullptr && text[0] != '\0') || (tag != nullptr && tag[0] != '\0')) count++;
+  for (const JsonVariant entry : doc["notes"].as<JsonArray>()) {
+    if (entry.is<JsonObject>()) count++;
   }
   return count;
 }
