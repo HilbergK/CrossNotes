@@ -20,8 +20,8 @@ changelogs live here — ours first, then CrossInk's exactly as upstream writes 
 ## [v1.2.1] - 2026-08-26 — CrossNotes
 
 ### Fixed
-- **Notes and Bookmarks** no longer fully deserializes every book's note text into heap just to show counts and sort by total annotations. Counting now filters out note bodies and only keeps tiny metadata, which stops OOM / fragmentation crashes on devices with many heavily annotated books.
-- Saving a note or tag now drops empty shells (no text and no tag) for the whole book in one write, so home counts stay aligned with real notes and legacy blank entries heal on the next edit.
+- Opening **Notes and Bookmarks** could crash on devices with many heavily annotated books.
+- A book's note count could read higher than the notes it actually shows.
 
 ---
 
